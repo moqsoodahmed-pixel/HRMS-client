@@ -9,14 +9,39 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// Guards a single in-flight "is the session actually gone?" check so that
+// e.g. a dashboard's 10 parallel requests all 401ing at once triggers one
+// re-check and, at most, one redirect — never a redirect storm.
+let sessionCheck = null;
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     const status = err.response?.status;
-    const isAuthProbe = err.config?.url?.includes('/auth/me') || err.config?.url?.includes('/auth/login');
-    // An expired session anywhere else means the user must sign in again.
-    if (status === 401 && !isAuthProbe && !window.location.pathname.startsWith('/login')) {
-      window.location.href = '/login';
+    const url = err.config?.url || '';
+    const isAuthProbe = url.includes('/auth/me') || url.includes('/auth/login');
+
+    // 403 = authenticated but not authorized (RBAC). That is never a reason
+    // to sign the user out — only a genuinely invalid/expired session (401)
+    // on a real endpoint gets here. The initial /auth/me probe and the login
+    // call itself handle their own 401s locally (unauthenticated state /
+    // invalid-credentials message) and must never trigger this redirect.
+    if (status !== 401 || isAuthProbe || window.location.pathname.startsWith('/login')) {
+      return Promise.reject(err);
+    }
+
+    // A single 401 could in principle be a transient blip, so confirm the
+    // session is truly gone with one /auth/me call before disrupting the
+    // user — and share that confirmation across every concurrent 401 rather
+    // than re-checking (or redirecting) once per failed request.
+    if (!sessionCheck) {
+      sessionCheck = api.get('/auth/me')
+        .catch(() => {
+          window.location.href = '/login';
+        })
+        .finally(() => {
+          sessionCheck = null;
+        });
     }
     return Promise.reject(err);
   },
