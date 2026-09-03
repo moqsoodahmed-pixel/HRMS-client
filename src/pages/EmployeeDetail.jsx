@@ -112,7 +112,7 @@ export default function EmployeeDetail() {
   const quickLinks = [
     { to: '/attendance', label: 'Attendance', icon: Clock },
     { to: '/leave', label: 'Leave', icon: Calendar },
-    ...(can('viewPayroll') || user?.role === 'EMPLOYEE' ? [{ to: '/payroll', label: 'Payroll', icon: Wallet }] : []),
+    ...(can('viewPayroll') || user?.role === 'EMPLOYEE' || user?.role === 'IT_HEAD' ? [{ to: '/payroll', label: 'Payroll', icon: Wallet }] : []),
     ...(can('viewLifecycle') ? [{ to: '/onboarding', label: 'Onboarding', icon: UserPlus }] : []),
     ...(can('viewLifecycle') ? [{ to: '/offboarding', label: 'Offboarding', icon: UserMinus }] : []),
   ];

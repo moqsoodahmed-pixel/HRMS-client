@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, FileText, Info } from 'lucide-react';
+import { ArrowLeft, Check, FileText, Info, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { employeeAPI } from '../api/axios';
-import { FormField, Select, LoadingBlock, StatusBadge, InfoRow } from '../components/ui';
+import { useAuth } from '../context/AuthContext';
+import { FormField, Select, LoadingBlock, StatusBadge, InfoRow, EmptyState } from '../components/ui';
 import {
   DEPARTMENTS, EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, GENDERS, BLOOD_GROUPS, REQUIRED_DOCUMENT_TYPES,
 } from '../constants';
@@ -29,6 +30,7 @@ export default function EmployeeForm() {
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { can } = useAuth();
 
   const { data, isLoading } = useQuery({ queryKey: ['employee', id], queryFn: () => employeeAPI.get(id), enabled: isEdit });
   const managersQuery = useQuery({ queryKey: ['employees', 'options'], queryFn: () => employeeAPI.options(), staleTime: 5 * 60 * 1000 });
@@ -128,6 +130,18 @@ export default function EmployeeForm() {
   };
 
   if (isEdit && isLoading) return <LoadingBlock label="Loading employee…" />;
+  if (!can('manageEmployees')) {
+    return (
+      <div className="card">
+        <EmptyState
+          icon={ShieldAlert}
+          title="You do not have access to this page"
+          description="Your role does not include employee management."
+          action={<Link to="/employees" className="btn-primary">Back to employees</Link>}
+        />
+      </div>
+    );
+  }
 
   const requiredCount = REQUIRED_DOCUMENT_TYPES.filter((d) => d.required).length;
 

@@ -8,14 +8,19 @@ export const DEPARTMENTS = [
   'Sales', 'Marketing', 'IT', 'Legal', 'Design',
 ];
 
-// CTO carries SUPER_ADMIN-equivalent effective permissions (see AuthContext's
-// ELEVATED_ROLES) while remaining a distinct, identifiable role everywhere it
-// is displayed — audit logs, employee details, approvals, notifications.
-export const ROLES = ['SUPER_ADMIN', 'CTO', 'HR_ADMIN', 'FINANCE', 'MANAGER', 'EMPLOYEE', 'AUDITOR'];
+// FOUNDER_CEO and CTO carry identical, full effective permissions (see
+// AuthContext's ELEVATED_ROLES) while remaining distinct, identifiable roles
+// everywhere displayed — audit logs, employee details, approvals, notifications.
+// SUPER_ADMIN is kept only for backward compatibility with pre-migration accounts.
+export const ROLES = ['FOUNDER_CEO', 'CTO', 'SUPER_ADMIN', 'DIRECTOR', 'IT_HEAD', 'PROJECT_HEAD', 'HR_ADMIN', 'FINANCE', 'MANAGER', 'EMPLOYEE', 'AUDITOR'];
 
 export const ROLE_LABELS = {
-  SUPER_ADMIN: 'Super Admin',
+  FOUNDER_CEO: 'Founder & CEO',
   CTO: 'CTO',
+  SUPER_ADMIN: 'Super Admin',
+  DIRECTOR: 'Director',
+  IT_HEAD: 'Head of IT',
+  PROJECT_HEAD: 'Project Head',
   HR_ADMIN: 'HR Admin',
   FINANCE: 'Finance',
   MANAGER: 'Manager',

@@ -65,7 +65,7 @@ function LeaveSummary() {
 /* ------------------------------------------------------------------ */
 
 function LeaveRequests() {
-  const { can, hasRole } = useAuth();
+  const { can } = useAuth();
   const queryClient = useQueryClient();
 
   const [filters, setFilters] = useState({ status: '', leaveType: '', startDate: '', endDate: '', department: '', search: '', employeeId: '' });
@@ -222,7 +222,7 @@ function LeaveRequests() {
           <label className="label">To</label>
           <input type="date" className="input w-40" value={filters.endDate} onChange={(e) => setFilter('endDate', e.target.value)} />
         </div>
-        {hasRole('SUPER_ADMIN', 'HR_ADMIN', 'MANAGER') && (
+        {can('viewTeamFilters') && (
           <div>
             <label className="label">Department</label>
             <Select className="w-44" value={filters.department} onChange={(e) => setFilter('department', e.target.value)} options={DEPARTMENTS} placeholder="All departments" />

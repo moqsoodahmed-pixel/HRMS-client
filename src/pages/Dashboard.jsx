@@ -28,9 +28,13 @@ export default function Dashboard() {
   if (role === 'EMPLOYEE') return <EmployeeDashboard />;
   if (role === 'AUDITOR') return <AuditorDashboard />;
   if (role === 'FINANCE') return <FinanceDashboard />;
-  if (role === 'MANAGER') return <ManagerDashboard />;
+  // IT_HEAD/PROJECT_HEAD get the same team-scoped shell as MANAGER — the
+  // stats themselves are already narrowed (department or direct reports) by the backend.
+  if (role === 'MANAGER' || role === 'IT_HEAD' || role === 'PROJECT_HEAD') return <ManagerDashboard />;
   if (role === 'HR_ADMIN') return <HRDashboard />;
-  // SUPER_ADMIN and CTO share the same full administrative dashboard.
+  // DIRECTOR sees the full administrative dashboard, but strictly read-only.
+  if (role === 'DIRECTOR') return <AdminDashboard readOnly />;
+  // FOUNDER_CEO, CTO and legacy SUPER_ADMIN share the same full administrative dashboard.
   return <AdminDashboard />;
 }
 
@@ -332,7 +336,7 @@ function CompensationQueue({ canAct }) {
 /* SUPER_ADMIN / CTO — full organisation overview                      */
 /* ------------------------------------------------------------------ */
 
-function AdminDashboard() {
+function AdminDashboard({ readOnly = false }) {
   const { user, employee } = useAuth();
   const { data, isLoading, error, refetch } = useDashboardStats();
   const payload = data?.data?.data;
@@ -353,9 +357,9 @@ function AdminDashboard() {
   ];
 
   return (
-    <DashboardShell title={`${greetingFor()}, ${displayName}`} subtitle={`Full organisation overview — ${formatDate(new Date())}.`}>
+    <DashboardShell title={`${greetingFor()}, ${displayName}`} subtitle={readOnly ? `Full organisation overview (read-only) — ${formatDate(new Date())}.` : `Full organisation overview — ${formatDate(new Date())}.`}>
       <QuickActions actions={[
-        { to: '/employees/new', label: 'Add Employee', icon: Plus },
+        ...(readOnly ? [] : [{ to: '/employees/new', label: 'Add Employee', icon: Plus }]),
         { to: '/attendance', label: 'Attendance', icon: Clock },
         { to: '/leave', label: 'Leave', icon: CalendarDays },
         { to: '/payroll', label: 'Payroll', icon: Wallet },
@@ -374,7 +378,7 @@ function AdminDashboard() {
       <PayrollSnapshot payroll={payload?.payroll} />
 
       {payload?.pendingCompensationRequests > 0 && (
-        <div className="mt-6"><CompensationQueue canAct /></div>
+        <div className="mt-6"><CompensationQueue canAct={!readOnly} /></div>
       )}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
