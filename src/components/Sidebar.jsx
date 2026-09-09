@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Clock, CalendarDays, Wallet, FileText, ShieldCheck,
   Megaphone, Package, UserPlus, UserMinus, BarChart3, ScrollText, X,
   ClipboardCheck, GraduationCap, TrendingUp, LogOut as ExitIcon, Lock,
-  Building2, Settings as SettingsIcon, PhoneCall,
+  Building2, Settings as SettingsIcon, PhoneCall, ClipboardList, FileSignature,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { COMPANY_NAME } from '../constants';
@@ -26,6 +26,8 @@ const NAV_ITEMS = [
   { label: 'Onboarding', to: '/onboarding', icon: UserPlus },
   { label: 'Offboarding', to: '/offboarding', icon: UserMinus },
   { label: 'Sales Leads', to: '/sales-leads', icon: PhoneCall },
+  { label: 'Daily Reports', to: '/daily-reports', icon: ClipboardList },
+  { label: 'Appointment Letters', to: '/appointment-letters', icon: FileSignature },
   { label: 'Reports', to: '/reports', icon: BarChart3 },
   { label: 'Audit Logs', to: '/audit', icon: ScrollText },
 ];
@@ -51,6 +53,8 @@ const ADMIN_NAV_GROUPS = [
   { type: 'item', label: 'Performance Reviews', to: '/performance', icon: TrendingUp },
   { type: 'item', label: 'Manage Employee Exits', to: '/offboarding', icon: ExitIcon },
   { type: 'item', label: 'Sales Leads', to: '/sales-leads', icon: PhoneCall },
+  { type: 'item', label: 'Daily Reports', to: '/daily-reports', icon: ClipboardList },
+  { type: 'item', label: 'Appointment Letters', to: '/appointment-letters', icon: FileSignature },
   {
     type: 'group',
     label: 'Other modules',

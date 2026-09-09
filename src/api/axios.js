@@ -319,3 +319,35 @@ export const notificationAPI = {
   markRead: (id) => api.patch(`/notifications/${id}/read`),
   markAllRead: () => api.patch('/notifications/read-all'),
 };
+
+export const leadsAPI = {
+  preview: (formData) => api.post('/leads/preview', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  upload: (formData) => api.post('/leads/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  list: (params) => api.get('/leads', { params: clean(params) }),
+  get: (id) => api.get(`/leads/${id}`),
+  updateStatus: (id, data) => api.patch(`/leads/${id}/status`, data),
+  reassign: (id, data) => api.patch(`/leads/${id}/assign`, data),
+  stats: (params) => api.get('/leads/stats', { params: clean(params) }),
+  batches: () => api.get('/leads/batches'),
+  deleteBatch: (batch) => api.delete(`/leads/batch/${encodeURIComponent(batch)}`),
+};
+
+export const dailyReportAPI = {
+  create: (data) => api.post('/daily-reports', data),
+  update: (id, data) => api.patch(`/daily-reports/${id}`, data),
+  submit: (id) => api.post(`/daily-reports/${id}/submit`),
+  review: (id, data) => api.post(`/daily-reports/${id}/review`, data),
+  mine: (params) => api.get('/daily-reports/me', { params: clean(params) }),
+  list: (params) => api.get('/daily-reports', { params: clean(params) }),
+  get: (id) => api.get(`/daily-reports/${id}`),
+  stats: () => api.get('/daily-reports/stats'),
+};
+
+export const appointmentLetterAPI = {
+  create: (data) => api.post('/appointment-letters', data),
+  list: (params) => api.get('/appointment-letters', { params: clean(params) }),
+  get: (id) => api.get(`/appointment-letters/${id}`),
+  update: (id, data) => api.patch(`/appointment-letters/${id}`, data),
+  generate: (id) => api.post(`/appointment-letters/${id}/generate`),
+  downloadUrl: (id) => `/api/appointment-letters/${id}/pdf`,
+};

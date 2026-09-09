@@ -76,6 +76,8 @@ export const ROUTE_ACCESS = {
   '/exit': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
   // Sales Leads — all authenticated roles may view the leads page
   '/sales-leads': null,
+  '/daily-reports': null,
+  '/appointment-letters': ['HR_ADMIN'],
 };
 
 export function AuthProvider({ children }) {

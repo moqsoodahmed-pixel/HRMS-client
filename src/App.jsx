@@ -1,6 +1,14 @@
-import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { ShieldAlert, Compass } from 'lucide-react';
-import { useAuth } from './context/AuthContext';
+import { Toaster } from 'react-hot-toast';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider, useAuth } from './context/AuthContext';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, staleTime: 30_000 },
+  },
+});
 import Layout from './components/Layout';
 import { Spinner, EmptyState } from './components/ui';
 
@@ -25,6 +33,9 @@ import ExitProcess from './pages/ExitProcess';
 import Reports from './pages/Reports';
 import AuditLogs from './pages/AuditLogs';
 import Settings from './pages/Settings';
+import SalesLeads from './pages/SalesLeads';
+import DailyReports from './pages/DailyReports';
+import AppointmentLetters from './pages/AppointmentLetters';
 
 function FullScreenLoader() {
   return (
@@ -60,23 +71,17 @@ function NotFound() {
   );
 }
 
-/**
- * Wraps a page in the app shell, redirecting anonymous visitors to the login
- * screen and showing a clear message when a role lacks access.
- */
 function Private({ children, access }) {
   const { user, loading, canAccess, isRouteLocked } = useAuth();
   const location = useLocation();
 
   if (loading) return <FullScreenLoader />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  // Server-enforced too (see requireOnboardingApproved) — this redirect only
-  // keeps the UI from ever rendering a locked module in the first place.
   if (isRouteLocked(location.pathname)) return <Navigate to="/onboarding/me" replace />;
   return <Layout>{access && !canAccess(access) ? <Forbidden /> : children}</Layout>;
 }
 
-export default function App() {
+function AppRoutes() {
   const { user, loading } = useAuth();
   if (loading) return <FullScreenLoader />;
 
@@ -109,7 +114,32 @@ export default function App() {
       <Route path="/audit" element={<Private access="/audit"><AuditLogs /></Private>} />
       <Route path="/settings" element={<Private access="/settings"><Settings /></Private>} />
 
+      {/* New modules */}
+      <Route path="/sales-leads" element={<Private access="/sales-leads"><SalesLeads /></Private>} />
+      <Route path="/daily-reports" element={<Private access="/daily-reports"><DailyReports /></Private>} />
+      <Route path="/appointment-letters" element={<Private access="/appointment-letters"><AppointmentLetters /></Private>} />
+
       <Route path="*" element={user ? <Private><NotFound /></Private> : <Navigate to="/login" replace />} />
     </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRoutes />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: { fontSize: '0.875rem' },
+              success: { iconTheme: { primary: '#4f46e5', secondary: '#fff' } },
+            }}
+          />
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
