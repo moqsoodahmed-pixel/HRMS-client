@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   CalendarDays, CalendarPlus, Check, X, Ban, Wallet, Clock, CheckCircle2, XCircle, Plus, PartyPopper,
+  ChevronLeft, ChevronRight, Edit,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { leaveAPI, employeeAPI } from '../api/axios';
@@ -17,7 +19,10 @@ const PAGE_SIZE = 20;
 
 export default function Leave() {
   const { can } = useAuth();
-  const [tab, setTab] = useState('requests');
+  const [searchParams] = useSearchParams();
+  // Lets nav links (e.g. the admin sidebar's "Calendar" entry) deep-link straight
+  // into a tab, e.g. /leave?tab=holidays — falls back to the default otherwise.
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'requests');
 
   const tabs = [
     { value: 'requests', label: 'Requests' },
@@ -26,10 +31,15 @@ export default function Leave() {
     ...(can('manageLeaveSettings') ? [{ value: 'types', label: 'Leave types' }] : []),
   ];
 
+  const isHolidays = tab === 'holidays';
+
   return (
     <div>
-      <PageHeader title="Leave Management" subtitle="Requests, balances, holidays and leave policy setup" />
-      <LeaveSummary />
+      <PageHeader
+        title={isHolidays ? 'Holiday Calendar' : 'Leave Management'}
+        subtitle={isHolidays ? 'Manage company holidays' : 'Requests, balances, holidays and leave policy setup'}
+      />
+      {!isHolidays && <LeaveSummary />}
       <div className="mt-6">
         <Tabs tabs={tabs} active={tab} onChange={setTab} />
         {tab === 'requests' && <LeaveRequests />}
@@ -64,7 +74,7 @@ function LeaveSummary() {
 
 /* ------------------------------------------------------------------ */
 
-function LeaveRequests() {
+export function LeaveRequests() {
   const { can } = useAuth();
   const queryClient = useQueryClient();
 
@@ -192,11 +202,13 @@ function LeaveRequests() {
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
-        <button type="button" className="btn-primary" onClick={() => setApplyOpen(true)}>
-          <CalendarPlus className="h-4 w-4" /> Apply for leave
-        </button>
-      </div>
+      {can('applyLeave') && (
+        <div className="mb-4 flex justify-end">
+          <button type="button" className="btn-primary" onClick={() => setApplyOpen(true)}>
+            <CalendarPlus className="h-4 w-4" /> Apply for leave
+          </button>
+        </div>
+      )}
 
       <FilterBar onReset={resetFilters}>
         <SearchInput className="min-w-[13rem] flex-1" value={filters.search} onChange={(v) => setFilter('search', v)} placeholder="Search employee…" />
@@ -241,7 +253,7 @@ function LeaveRequests() {
             icon={CalendarDays}
             title="No leave requests"
             description="Nothing matches the current filters."
-            action={<button type="button" className="btn-primary" onClick={() => setApplyOpen(true)}><CalendarPlus className="h-4 w-4" /> Apply for leave</button>}
+            action={can('applyLeave') ? <button type="button" className="btn-primary" onClick={() => setApplyOpen(true)}><CalendarPlus className="h-4 w-4" /> Apply for leave</button> : null}
           />
         }
         footer={<Pagination page={meta?.page || 1} totalPages={meta?.totalPages} total={meta?.total} limit={PAGE_SIZE} onChange={setPage} />}
@@ -349,7 +361,7 @@ function ApplyLeaveModal({ open, onClose, leaveTypes, onSaved }) {
           )}
         </FormField>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Start date" required error={errors.startDate}>
             <input
               type="date"
@@ -499,18 +511,28 @@ function LeaveBalances() {
 
 /* ------------------------------------------------------------------ */
 
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 function Holidays() {
   const { can } = useAuth();
   const queryClient = useQueryClient();
   const [year, setYear] = useState(new Date().getFullYear());
-  const [addOpen, setAddOpen] = useState(false);
+  const [month, setMonth] = useState('');
+  const [search, setSearch] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [removing, setRemoving] = useState(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['leave', 'holidays', year],
     queryFn: () => leaveAPI.holidays({ year }),
   });
-  const holidays = data?.data?.data || [];
+  const allHolidays = data?.data?.data || [];
+  const holidays = allHolidays.filter((h) => {
+    if (month !== '' && new Date(h.date).getMonth() !== Number(month)) return false;
+    if (search && !h.name.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['leave', 'holidays'] });
 
@@ -525,12 +547,23 @@ function Holidays() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <label className="label">Year</label>
-          <Select className="w-32" value={String(year)} onChange={(e) => setYear(Number(e.target.value))} options={years} />
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="label">Year</label>
+            <div className="flex items-center gap-1">
+              <button type="button" className="btn-ghost" onClick={() => setYear((y) => y - 1)} aria-label="Previous year"><ChevronLeft className="h-4 w-4" /></button>
+              <Select className="w-28" value={String(year)} onChange={(e) => setYear(Number(e.target.value))} options={years} />
+              <button type="button" className="btn-ghost" onClick={() => setYear((y) => y + 1)} aria-label="Next year"><ChevronRight className="h-4 w-4" /></button>
+            </div>
+          </div>
+          <div>
+            <label className="label">Month</label>
+            <Select className="w-36" value={month} onChange={(e) => setMonth(e.target.value)} options={MONTH_NAMES.map((m, i) => ({ value: String(i), label: m }))} placeholder="All months" />
+          </div>
+          <SearchInput className="w-56" value={search} onChange={setSearch} placeholder="Search holidays…" />
         </div>
         {can('manageLeaveSettings') && (
-          <button type="button" className="btn-primary" onClick={() => setAddOpen(true)}>
+          <button type="button" className="btn-primary" onClick={() => setFormOpen(true)}>
             <Plus className="h-4 w-4" /> Add holiday
           </button>
         )}
@@ -541,14 +574,20 @@ function Holidays() {
           { key: 'name', header: 'Holiday', render: (h) => <span className="font-medium text-gray-900">{h.name}</span> },
           { key: 'date', header: 'Date', render: (h) => formatDate(h.date) },
           { key: 'day', header: 'Day', render: (h) => new Date(h.date).toLocaleDateString('en-IN', { weekday: 'long' }) },
-          { key: 'type', header: 'Type', render: (h) => <StatusBadge status={h.type} tone={h.type === 'COMPANY' ? 'purple' : h.type === 'OPTIONAL' ? 'amber' : 'blue'} /> },
+          { key: 'type', header: 'Type', render: (h) => <StatusBadge status={h.type} tone={h.type === 'COMPANY' ? 'purple' : h.type === 'OPTIONAL' ? 'amber' : h.type === 'FESTIVAL' ? 'purple' : 'blue'} /> },
+          { key: 'description', header: 'Description', render: (h) => <span className="truncate text-xs text-gray-500">{h.description || '—'}</span> },
           ...(can('manageLeaveSettings') ? [{
             key: 'actions',
             header: '',
             render: (h) => (
-              <button type="button" className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50" onClick={() => setRemoving(h)} title="Remove holiday">
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button type="button" className="rounded-lg p-1.5 text-gray-500 transition hover:bg-gray-100" onClick={() => setEditing(h)} title="Edit holiday">
+                  <Edit className="h-4 w-4" />
+                </button>
+                <button type="button" className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50" onClick={() => setRemoving(h)} title="Remove holiday">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             ),
           }] : []),
         ]}
@@ -559,7 +598,7 @@ function Holidays() {
         empty={<EmptyState icon={PartyPopper} title={`No holidays for ${year}`} description="Add the company holiday calendar so employees can plan ahead." />}
       />
 
-      <AddHolidayModal open={addOpen} onClose={() => setAddOpen(false)} onSaved={refresh} year={year} />
+      <HolidayFormModal open={formOpen || Boolean(editing)} holiday={editing} onClose={() => { setFormOpen(false); setEditing(null); }} onSaved={refresh} year={year} />
       <ConfirmDialog
         open={Boolean(removing)}
         onClose={() => setRemoving(null)}
@@ -573,18 +612,25 @@ function Holidays() {
   );
 }
 
-function AddHolidayModal({ open, onClose, onSaved, year }) {
-  const empty = { name: '', date: '', type: 'NATIONAL' };
+function HolidayFormModal({ open, holiday, onClose, onSaved, year }) {
+  const isEdit = Boolean(holiday);
+  const empty = { name: '', date: '', type: 'NATIONAL', description: '' };
   const [form, setForm] = useState(empty);
   const [errors, setErrors] = useState({});
+  const [loadedFor, setLoadedFor] = useState(null);
+
+  if (open && isEdit && loadedFor !== holiday._id) {
+    setForm({ name: holiday.name, date: holiday.date?.slice(0, 10) || '', type: holiday.type || 'NATIONAL', description: holiday.description || '' });
+    setLoadedFor(holiday._id);
+  }
 
   const save = useMutation({
-    mutationFn: (data) => leaveAPI.createHoliday(data),
-    onSuccess: () => { toast.success('Holiday added'); onSaved(); close(); },
+    mutationFn: (data) => (isEdit ? leaveAPI.updateHoliday(holiday._id, data) : leaveAPI.createHoliday(data)),
+    onSuccess: () => { toast.success(isEdit ? 'Holiday updated' : 'Holiday added'); onSaved(); close(); },
     onError: (err) => { setErrors(fieldErrors(err)); toast.error(errorMessage(err)); },
   });
 
-  function close() { setForm(empty); setErrors({}); onClose(); }
+  function close() { setForm(empty); setErrors({}); setLoadedFor(null); onClose(); }
 
   const submit = (e) => {
     e.preventDefault();
@@ -597,7 +643,7 @@ function AddHolidayModal({ open, onClose, onSaved, year }) {
   };
 
   return (
-    <Modal open={open} onClose={close} title="Add holiday" size="sm">
+    <Modal open={open} onClose={close} title={isEdit ? 'Edit holiday' : 'Add holiday'} size="sm">
       <form onSubmit={submit} className="space-y-4 p-5">
         <FormField label="Holiday name" required error={errors.name}>
           <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Diwali" />
@@ -608,9 +654,12 @@ function AddHolidayModal({ open, onClose, onSaved, year }) {
         <FormField label="Type" required>
           <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} options={HOLIDAY_TYPES} />
         </FormField>
+        <FormField label="Description" hint="Optional">
+          <textarea className="input min-h-[70px]" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        </FormField>
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
-          <button type="submit" className="btn-primary" disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Add holiday'}</button>
+          <button type="submit" className="btn-primary" disabled={save.isPending}>{save.isPending ? 'Saving…' : isEdit ? 'Save changes' : 'Add holiday'}</button>
         </div>
       </form>
     </Modal>
@@ -705,7 +754,7 @@ function LeaveTypeModal({ open, type, onClose, onSaved }) {
   return (
     <Modal open={open} onClose={close} title={isEdit ? 'Edit leave type' : 'New leave type'}>
       <form onSubmit={submit} className="space-y-4 p-5">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Name" required error={errors.name}>
             <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </FormField>
@@ -716,7 +765,7 @@ function LeaveTypeModal({ open, type, onClose, onSaved }) {
         <FormField label="Description">
           <textarea className="input min-h-[70px]" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Days per year" required error={errors.maxDaysPerYear}>
             <input type="number" min="0" max="365" className="input" value={form.maxDaysPerYear} onChange={(e) => setForm({ ...form, maxDaysPerYear: e.target.value })} />
           </FormField>

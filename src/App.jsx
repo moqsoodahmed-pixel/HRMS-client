@@ -17,9 +17,14 @@ import Policies from './pages/Policies';
 import Announcements from './pages/Announcements';
 import Assets from './pages/Assets';
 import Onboarding from './pages/Onboarding';
+import MyOnboarding from './pages/MyOnboarding';
 import Offboarding from './pages/Offboarding';
+import Training from './pages/Training';
+import Performance from './pages/Performance';
+import ExitProcess from './pages/ExitProcess';
 import Reports from './pages/Reports';
 import AuditLogs from './pages/AuditLogs';
+import Settings from './pages/Settings';
 
 function FullScreenLoader() {
   return (
@@ -60,11 +65,14 @@ function NotFound() {
  * screen and showing a clear message when a role lacks access.
  */
 function Private({ children, access }) {
-  const { user, loading, canAccess } = useAuth();
+  const { user, loading, canAccess, isRouteLocked } = useAuth();
   const location = useLocation();
 
   if (loading) return <FullScreenLoader />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  // Server-enforced too (see requireOnboardingApproved) — this redirect only
+  // keeps the UI from ever rendering a locked module in the first place.
+  if (isRouteLocked(location.pathname)) return <Navigate to="/onboarding/me" replace />;
   return <Layout>{access && !canAccess(access) ? <Forbidden /> : children}</Layout>;
 }
 
@@ -92,9 +100,14 @@ export default function App() {
       <Route path="/announcements" element={<Private access="/announcements"><Announcements /></Private>} />
       <Route path="/assets" element={<Private access="/assets"><Assets /></Private>} />
       <Route path="/onboarding" element={<Private access="/onboarding"><Onboarding /></Private>} />
+      <Route path="/onboarding/me" element={<Private access="/onboarding/me"><MyOnboarding /></Private>} />
       <Route path="/offboarding" element={<Private access="/offboarding"><Offboarding /></Private>} />
+      <Route path="/training" element={<Private access="/training"><Training /></Private>} />
+      <Route path="/performance" element={<Private access="/performance"><Performance /></Private>} />
+      <Route path="/exit" element={<Private access="/exit"><ExitProcess /></Private>} />
       <Route path="/reports" element={<Private access="/reports"><Reports /></Private>} />
       <Route path="/audit" element={<Private access="/audit"><AuditLogs /></Private>} />
+      <Route path="/settings" element={<Private access="/settings"><Settings /></Private>} />
 
       <Route path="*" element={user ? <Private><NotFound /></Private> : <Navigate to="/login" replace />} />
     </Routes>

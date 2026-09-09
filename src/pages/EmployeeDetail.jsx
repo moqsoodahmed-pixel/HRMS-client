@@ -3,10 +3,10 @@ import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Edit, Archive, Plus, Download, Eye, CheckCircle2, Clock, Calendar,
-  Wallet, UserPlus, UserMinus, KeyRound, ShieldQuestion, ClipboardCheck, AlertTriangle,
+  Wallet, UserPlus, UserMinus, KeyRound, ShieldQuestion, ClipboardCheck, AlertTriangle, FileEdit,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { employeeAPI, documentAPI } from '../api/axios';
+import { employeeAPI, documentAPI, editRequestAPI } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
   Modal, LoadingBlock, EmptyState, StatusBadge, Avatar, Tabs, InfoRow,
@@ -19,7 +19,7 @@ export default function EmployeeDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { can, user } = useAuth();
+  const { can, user, employee: ownEmployee } = useAuth();
   const [searchParams] = useSearchParams();
   // Supports being deep-linked straight to a tab, e.g. after creating an
   // employee HR is sent here to start on the required-documents checklist.
@@ -28,6 +28,7 @@ export default function EmployeeDetail() {
   const [showArchive, setShowArchive] = useState(false);
   const [rejectingDoc, setRejectingDoc] = useState(null);
   const [uploadCategory, setUploadCategory] = useState('');
+  const [requestingChanges, setRequestingChanges] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({ queryKey: ['employee', id], queryFn: () => employeeAPI.get(id) });
   const { data: docsData, isLoading: docsLoading } = useQuery({
@@ -143,6 +144,11 @@ export default function EmployeeDetail() {
             <Link to={`/employees/${id}/edit`} className="btn-secondary"><Edit className="h-4 w-4" /> Edit</Link>
             <button type="button" className="btn-danger" onClick={() => setShowArchive(true)}><Archive className="h-4 w-4" /> Archive</button>
           </div>
+        )}
+        {!can('manageEmployees') && user?.role === 'EMPLOYEE' && ownEmployee?._id === id && (
+          <button type="button" className="btn-secondary" onClick={() => setRequestingChanges(true)}>
+            <FileEdit className="h-4 w-4" /> Request Changes
+          </button>
         )}
       </div>
 
@@ -281,7 +287,58 @@ export default function EmployeeDetail() {
       />
 
       <RejectDocModal doc={rejectingDoc} onClose={() => setRejectingDoc(null)} onSubmit={(reason) => rejectMut.mutate({ docId: rejectingDoc._id, reason })} loading={rejectMut.isPending} />
+
+      <RequestChangesModal
+        open={requestingChanges}
+        onClose={() => setRequestingChanges(false)}
+        employee={emp}
+      />
     </div>
+  );
+}
+
+/**
+ * Minimal new self-service flow: an employee proposes a change to a small
+ * set of fields; nothing is written to Employee until HR/Admin approves it
+ * (see employeeEditRequestController.js / Manage Employees › Edit Requests).
+ */
+function RequestChangesModal({ open, onClose, employee }) {
+  const empty = { personalEmail: '', personalMobile: '', workLocation: '' };
+  const [form, setForm] = useState(empty);
+
+  const submit = useMutation({
+    mutationFn: (data) => editRequestAPI.create(data),
+    onSuccess: () => { toast.success('Change request submitted for HR/Admin review'); close(); },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  function close() { setForm(empty); onClose(); }
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const changes = Object.fromEntries(Object.entries(form).filter(([, v]) => v.trim() !== ''));
+    if (Object.keys(changes).length === 0) { toast.error('Change at least one field.'); return; }
+    submit.mutate(changes);
+  };
+
+  return (
+    <Modal open={open} onClose={close} title="Request Profile Changes" size="sm" description="Submitted changes need HR/Admin approval before they take effect.">
+      <form onSubmit={handleSubmit} className="space-y-4 p-5">
+        <FormField label="Personal Email" hint={`Current: ${employee?.personalEmail || '—'}`}>
+          <input type="email" className="input" value={form.personalEmail} onChange={(e) => setForm({ ...form, personalEmail: e.target.value })} />
+        </FormField>
+        <FormField label="Personal Mobile" hint={`Current: ${employee?.personalMobile || '—'}`}>
+          <input className="input" value={form.personalMobile} onChange={(e) => setForm({ ...form, personalMobile: e.target.value })} />
+        </FormField>
+        <FormField label="Work Location" hint={`Current: ${employee?.workLocation || '—'}`}>
+          <input className="input" value={form.workLocation} onChange={(e) => setForm({ ...form, workLocation: e.target.value })} />
+        </FormField>
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
+          <button type="submit" className="btn-primary" disabled={submit.isPending}>{submit.isPending ? 'Submitting…' : 'Submit request'}</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -455,7 +512,7 @@ function IdentityFormModal({ employeeId, docType, existing, onClose, onSaved }) 
         <FormField label="Document number" required error={error}>
           <input className="input" value={form.number} onChange={(e) => { setForm({ ...form, number: e.target.value }); setError(''); }} placeholder="Enter the full number" />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Issue date">
             <input type="date" className="input" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} />
           </FormField>

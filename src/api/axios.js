@@ -80,6 +80,19 @@ export const employeeAPI = {
   import: (rows) => api.post('/employees/import', { rows }),
 };
 
+/**
+ * Employee self-service "request a profile change" — new, minimal flow (see
+ * server/controllers/employeeEditRequestController.js). Not part of the
+ * onboarding system; changes only ever apply once HR/Admin approves them.
+ */
+export const editRequestAPI = {
+  create: (data) => api.post('/employees/edit-requests/me', data),
+  list: (params) => api.get('/employees/edit-requests', { params: clean(params) }),
+  get: (id) => api.get(`/employees/edit-requests/${id}`),
+  approve: (id) => api.patch(`/employees/edit-requests/${id}/approve`),
+  reject: (id, reason) => api.patch(`/employees/edit-requests/${id}/reject`, { reason }),
+};
+
 export const dashboardAPI = {
   stats: () => api.get('/dashboard/stats'),
 };
@@ -92,6 +105,23 @@ export const attendanceAPI = {
   checkOut: () => api.post('/attendance/checkout'),
   mark: (data) => api.post('/attendance', data),
   update: (id, data) => api.patch(`/attendance/${id}`, data),
+};
+
+/** Employee-submitted attendance correction / unlock requests — new, minimal flow (see server/controllers/attendanceRequestController.js). */
+export const attendanceRequestAPI = {
+  create: (data) => api.post('/attendance/requests', data),
+  list: (params) => api.get('/attendance/requests', { params: clean(params) }),
+  get: (id) => api.get(`/attendance/requests/${id}`),
+  approve: (id) => api.patch(`/attendance/requests/${id}/approve`),
+  reject: (id, reason) => api.patch(`/attendance/requests/${id}/reject`, { reason }),
+};
+
+/** Shift management — new, minimal (see server/models/Shift.js). */
+export const shiftAPI = {
+  list: (params) => api.get('/shifts', { params: clean(params) }),
+  create: (data) => api.post('/shifts', data),
+  update: (id, data) => api.patch(`/shifts/${id}`, data),
+  assign: (employeeId, shiftId) => api.patch(`/employees/${employeeId}/shift`, { shiftId }),
 };
 
 export const leaveAPI = {
@@ -108,6 +138,7 @@ export const leaveAPI = {
   balances: (employeeId, params) => api.get(`/leave/balances/${employeeId}`, { params: clean(params) }),
   holidays: (params) => api.get('/leave/holidays', { params: clean(params) }),
   createHoliday: (data) => api.post('/leave/holidays', data),
+  updateHoliday: (id, data) => api.patch(`/leave/holidays/${id}`, data),
   deleteHoliday: (id) => api.delete(`/leave/holidays/${id}`),
 };
 
@@ -193,6 +224,68 @@ export const onboardingAPI = {
   createTask: (data) => api.post('/onboarding', data),
   updateTask: (id, data) => api.patch(`/onboarding/task/${id}`, data),
   deleteTask: (id) => api.delete(`/onboarding/task/${id}`),
+};
+
+/**
+ * Employee self-service onboarding wizard (Personal/Education/Experience/
+ * Bank/Emergency/Documents/Review). Separate from `onboardingAPI` above,
+ * which drives the HR-run onboarding *task checklist* — these hit
+ * /onboarding-profile* on the server, not /onboarding.
+ */
+export const onboardingProfileAPI = {
+  me: () => api.get('/onboarding-profile/me'),
+  saveStep: (stepKey, data) => api.put(`/onboarding-profile/me/step/${stepKey}`, data),
+  submit: () => api.post('/onboarding-profile/me/submit'),
+  list: (params) => api.get('/onboarding-profile', { params: clean(params) }),
+  get: (employeeId) => api.get(`/onboarding-profile/${employeeId}`),
+  approve: (employeeId) => api.patch(`/onboarding-profile/${employeeId}/approve`),
+  reject: (employeeId, reason) => api.patch(`/onboarding-profile/${employeeId}/reject`, { reason }),
+};
+
+/** Training catalog + assignments — new, minimal (see server/controllers/trainingController.js). */
+export const trainingAPI = {
+  list: (params) => api.get('/training', { params: clean(params) }),
+  stats: () => api.get('/training/stats'),
+  get: (id) => api.get(`/training/${id}`),
+  create: (formData) => api.post('/training', formData),
+  update: (id, data) => api.patch(`/training/${id}`, data),
+  deactivate: (id) => api.delete(`/training/${id}`),
+  assign: (id, employeeIds) => api.post(`/training/${id}/assign`, { employeeIds }),
+  assignees: (id) => api.get(`/training/${id}/assignees`),
+  myAssignments: () => api.get('/training/assignments/me'),
+  updateMyAssignment: (id, status) => api.patch(`/training/assignments/me/${id}`, { status }),
+  downloadUrl: (id) => `/api/training/${id}/download`,
+};
+
+/** Performance reviews — new, minimal (see server/controllers/performanceController.js). */
+export const performanceAPI = {
+  list: (params) => api.get('/performance-reviews', { params: clean(params) }),
+  stats: () => api.get('/performance-reviews/stats'),
+  get: (id) => api.get(`/performance-reviews/${id}`),
+  myReviews: () => api.get('/performance-reviews/me'),
+  create: (data) => api.post('/performance-reviews', data),
+  update: (id, data) => api.patch(`/performance-reviews/${id}`, data),
+  submit: (id) => api.patch(`/performance-reviews/${id}/submit`),
+  complete: (id) => api.patch(`/performance-reviews/${id}/complete`),
+  remove: (id) => api.delete(`/performance-reviews/${id}`),
+};
+
+/** Employee-initiated exit requests — new, minimal (see server/controllers/exitRequestController.js). */
+export const exitRequestAPI = {
+  create: (data) => api.post('/exit-requests/me', data),
+  mine: () => api.get('/exit-requests/me'),
+  cancel: (id) => api.patch(`/exit-requests/me/${id}/cancel`),
+  list: (params) => api.get('/exit-requests', { params: clean(params) }),
+  get: (id) => api.get(`/exit-requests/${id}`),
+  approve: (id) => api.patch(`/exit-requests/${id}/approve`),
+  reject: (id, reason) => api.patch(`/exit-requests/${id}/reject`, { reason }),
+  complete: (id) => api.patch(`/exit-requests/${id}/complete`),
+};
+
+/** Organization settings — new, minimal, elevated-only (see server/controllers/orgSettingsController.js). */
+export const settingsAPI = {
+  get: () => api.get('/settings'),
+  update: (data) => api.patch('/settings', data),
 };
 
 export const offboardingAPI = {

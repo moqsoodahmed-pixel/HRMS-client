@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { Megaphone, Plus, Eye, Archive, BellRing, Mail, MailOpen, Users2 } from 'lucide-react';
+import { Megaphone, Plus, Eye, Archive, BellRing, Mail, MailOpen, Users2, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { announcementAPI } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
@@ -17,7 +17,7 @@ export default function Announcements() {
   const { can } = useAuth();
   const queryClient = useQueryClient();
 
-  const [filters, setFilters] = useState({ search: '', priority: '', unreadOnly: false });
+  const [filters, setFilters] = useState({ search: '', priority: '', status: '', unreadOnly: false });
   const [page, setPage] = useState(1);
   const [viewing, setViewing] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -26,6 +26,8 @@ export default function Announcements() {
 
   const setFilter = (key, value) => { setFilters((f) => ({ ...f, [key]: value })); setPage(1); };
 
+  // The model only tracks isActive (no separate DRAFT state) — "status" here
+  // maps directly onto that field, resolved server-side (see contentController.getAnnouncements).
   const query = useQuery({
     queryKey: ['announcements', filters, page],
     queryFn: () => announcementAPI.list({ ...filters, page, limit: PAGE_SIZE }),
@@ -46,6 +48,12 @@ export default function Announcements() {
     mutationFn: (id) => announcementAPI.remove(id),
     onSuccess: () => { toast.success('Announcement removed'); refresh(); setRemoving(null); },
     onError: (err) => { toast.error(errorMessage(err)); setRemoving(null); },
+  });
+
+  const activate = useMutation({
+    mutationFn: (id) => announcementAPI.update(id, { isActive: true }),
+    onSuccess: () => { toast.success('Announcement activated'); refresh(); },
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   const openAnnouncement = (row) => {
@@ -75,6 +83,7 @@ export default function Announcements() {
       ),
     },
     { key: 'priority', header: 'Priority', render: (row) => <StatusBadge status={row.priority} /> },
+    { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.isActive ? 'ACTIVE' : 'INACTIVE'} /> },
     {
       key: 'audience',
       header: 'Audience',
@@ -100,9 +109,15 @@ export default function Announcements() {
               <button type="button" className="text-xs font-medium text-gray-600 hover:underline" onClick={(e) => { e.stopPropagation(); setEditing(row); }}>
                 Edit
               </button>
-              <button type="button" className="flex items-center gap-1 text-xs font-medium text-red-600 hover:underline" onClick={(e) => { e.stopPropagation(); setRemoving(row); }}>
-                <Archive className="h-3.5 w-3.5" /> Remove
-              </button>
+              {row.isActive ? (
+                <button type="button" className="flex items-center gap-1 text-xs font-medium text-red-600 hover:underline" onClick={(e) => { e.stopPropagation(); setRemoving(row); }}>
+                  <Archive className="h-3.5 w-3.5" /> Remove
+                </button>
+              ) : (
+                <button type="button" className="flex items-center gap-1 text-xs font-medium text-green-600 hover:underline" onClick={(e) => { e.stopPropagation(); activate.mutate(row._id); }} disabled={activate.isPending}>
+                  <RotateCcw className="h-3.5 w-3.5" /> Activate
+                </button>
+              )}
             </>
           )}
         </div>
@@ -114,7 +129,7 @@ export default function Announcements() {
     <div>
       <PageHeader
         title="Announcements"
-        subtitle="Company-wide and targeted communications"
+        subtitle="Manage company-wide announcements"
         actions={can('manageAnnouncements') && (
           <button type="button" className="btn-primary" onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" /> New announcement
@@ -131,8 +146,20 @@ export default function Announcements() {
       )}
 
       <div className="mt-6">
-        <FilterBar onReset={() => { setFilters({ search: '', priority: '', unreadOnly: false }); setPage(1); }}>
+        <FilterBar onReset={() => { setFilters({ search: '', priority: '', status: '', unreadOnly: false }); setPage(1); }}>
           <SearchInput className="min-w-[14rem] flex-1" value={filters.search} onChange={(v) => setFilter('search', v)} placeholder="Search announcements…" />
+          {can('manageAnnouncements') && (
+            <div>
+              <label className="label">Status</label>
+              <Select
+                className="w-36"
+                value={filters.status}
+                onChange={(e) => setFilter('status', e.target.value)}
+                options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]}
+                placeholder="All statuses"
+              />
+            </div>
+          )}
           <div>
             <label className="label">Priority</label>
             <Select className="w-36" value={filters.priority} onChange={(e) => setFilter('priority', e.target.value)} options={ANNOUNCEMENT_PRIORITIES} placeholder="All priorities" />

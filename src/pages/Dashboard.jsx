@@ -6,11 +6,12 @@ import {
   Users, UserCheck, UserX, CalendarClock, FileWarning, Cake, Building2,
   Megaphone, Activity, Package, Clock, UserPlus, UserMinus, Wallet, Plus,
   ShieldCheck, ScrollText, BarChart3, FileText, Check, X, Receipt, TrendingUp,
-  LogIn, LogOut, CalendarDays, PartyPopper, ClipboardList, ShieldAlert,
+  LogIn, LogOut, CalendarDays, PartyPopper, ClipboardList, ShieldAlert, Lock,
+  BadgeCheck, ClipboardCheck, Mail, Briefcase,
 } from 'lucide-react';
 import {
   dashboardAPI, attendanceAPI, leaveAPI, payrollAPI, documentAPI, announcementAPI,
-  policyAPI, onboardingAPI, offboardingAPI, compensationAPI, auditAPI,
+  policyAPI, onboardingAPI, offboardingAPI, compensationAPI, auditAPI, performanceAPI,
 } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -21,6 +22,7 @@ import {
   formatCurrency, formatDate, formatNumber, humanise, relativeTime, duration, formatTime,
   errorMessage,
 } from '../lib/format';
+import { COMPANY_NAME } from '../constants';
 
 export default function Dashboard() {
   const { role } = useAuth();
@@ -206,28 +208,6 @@ function ActivityFeedCard({ activity, isLoading }) {
   );
 }
 
-function PayrollSnapshot({ payroll }) {
-  const { can } = useAuth();
-  if (!payroll) return null;
-  return (
-    <div className="card mt-6 p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="section-title">Payroll this month</h2>
-          <p className="page-subtitle">{payroll.payslips} payslip(s) generated</p>
-        </div>
-        {can('viewPayroll') && <Link to="/payroll" className="btn-secondary">Open payroll</Link>}
-      </div>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <PayrollFigure label="Gross payroll" value={formatCurrency(payroll.grossPayroll)} />
-        <PayrollFigure label="Deductions" value={formatCurrency(payroll.totalDeductions)} />
-        <PayrollFigure label="Net payroll" value={formatCurrency(payroll.netPayroll)} accent />
-        <PayrollFigure label="Employees paid" value={formatNumber(payroll.employeesPaid)} />
-      </div>
-    </div>
-  );
-}
-
 function PayrollFigure({ label, value, accent }) {
   return (
     <div className={`rounded-xl p-4 ${accent ? 'bg-primary-50' : 'bg-gray-50'}`}>
@@ -336,6 +316,136 @@ function CompensationQueue({ canAct }) {
 /* SUPER_ADMIN / CTO — full organisation overview                      */
 /* ------------------------------------------------------------------ */
 
+/** "312 days" / "4 months" / "2 years" — used only for the workspace-age chip. */
+function ageFrom(dateValue) {
+  if (!dateValue) return null;
+  const days = Math.max(0, Math.floor((Date.now() - new Date(dateValue).getTime()) / 86400000));
+  if (days < 60) return `${days} day${days === 1 ? '' : 's'}`;
+  if (days < 730) return `${Math.floor(days / 30)} months`;
+  return `${Math.floor(days / 365)} years`;
+}
+
+function WorkspaceBar({ workspace }) {
+  if (!workspace) return null;
+  return (
+    <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-primary-100 bg-white/70 p-4 text-sm sm:grid-cols-4">
+      <div>
+        <p className="text-xs text-gray-400">Tenant Code</p>
+        <p className="font-semibold text-gray-800">{workspace.tenantCode || '—'}</p>
+      </div>
+      <div>
+        <p className="text-xs text-gray-400">Workspace Age</p>
+        <p className="font-semibold text-gray-800">{ageFrom(workspace.createdAt) || '—'}</p>
+      </div>
+      <div>
+        <p className="text-xs text-gray-400">Subscription</p>
+        <p className="font-semibold text-gray-800">{humanise(workspace.subscription?.status)}</p>
+      </div>
+      <div>
+        <p className="text-xs text-gray-400">Expiry Date</p>
+        <p className="font-semibold text-gray-800">{formatDate(workspace.subscription?.expiresAt)}</p>
+      </div>
+    </div>
+  );
+}
+
+function DashboardHero({ title, subtitle }) {
+  return (
+    <div className="mb-6 rounded-2xl bg-gradient-to-r from-primary-700 to-primary-500 p-6 text-white shadow-sm sm:p-8">
+      <h1 className="text-xl font-bold sm:text-2xl">{title}</h1>
+      <p className="mt-1.5 max-w-2xl text-sm text-primary-50">{subtitle}</p>
+    </div>
+  );
+}
+
+/**
+ * Payroll is treated as a first-class dashboard component here because
+ * payroll/salary is processed in collaboration with an external partner
+ * ("XYZ") — no calculation logic lives on the frontend; this only renders
+ * whatever server/controllers/payrollController.js and dashboardController.js
+ * already computed from real Payslip/SalaryStructure records. `integration`
+ * is a placeholder shape (honestly reported as not connected) for that future
+ * XYZ sync to plug into — see dashboardController.getDashboardStats.
+ */
+function PayrollDashboardCard({ payroll }) {
+  const { can } = useAuth();
+  return (
+    <section className="card p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2"><Wallet className="h-4 w-4 text-gray-400" /><h2 className="section-title">Payroll & Salary</h2></div>
+        {can('viewPayroll') && <Link to="/payroll" className="btn-secondary">Open payroll</Link>}
+      </div>
+
+      {!payroll || payroll.payslips === 0 ? (
+        <EmptyState icon={Wallet} title="No Payslips Yet" description="No payslips have been generated for the current period." />
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <StatusBadge status={payroll.status} />
+            <span className="text-xs text-gray-400">Period: {new Date(payroll.year, payroll.month - 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <PayrollFigure label="Gross payroll" value={formatCurrency(payroll.grossPayroll, { compact: true })} />
+            <PayrollFigure label="Deductions" value={formatCurrency(payroll.totalDeductions, { compact: true })} />
+            <PayrollFigure label="Net payroll" value={formatCurrency(payroll.netPayroll, { compact: true })} accent />
+            <PayrollFigure label="Employees paid" value={`${formatNumber(payroll.employeesPaid)} / ${formatNumber(payroll.payslips)}`} />
+          </div>
+          {payroll.pendingActions > 0 && (
+            <p className="mt-4 rounded-lg bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+              {payroll.pendingActions} active employee(s) still need a payslip generated this period.
+            </p>
+          )}
+        </>
+      )}
+
+      <div className="mt-4 rounded-lg bg-gray-50 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium text-gray-700">{payroll?.integration?.provider || 'XYZ'} Payroll Integration</span>
+          <StatusBadge status={payroll?.integration?.status || 'NOT_CONNECTED'} tone="gray" />
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Salary processing is handled by our external payroll partner. This connection isn't set up yet — once it is, sync status and processing details will appear here automatically.
+        </p>
+      </div>
+      {payroll?.errors?.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs text-red-600">
+          {payroll.errors.map((e, i) => <li key={i}>{e}</li>)}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** Real attendance/employee-derived signal, standing in for org performance until a dedicated review system exists. */
+function OrganizationPerformance({ stats, isLoading }) {
+  // Denominator matches the numerator's population (status !== INACTIVE) —
+  // using `activeEmployees` (status === ACTIVE only) here could push this over 100%.
+  const rate = stats?.attendanceEligibleEmployees ? Math.min(100, Math.round((stats.presentToday / stats.attendanceEligibleEmployees) * 100)) : null;
+  return (
+    <section className="card p-5">
+      <div className="mb-4 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-gray-400" /><h2 className="section-title">Organization Performance</h2></div>
+      {isLoading ? (
+        <div className="h-24 animate-pulse rounded bg-gray-100" />
+      ) : rate === null ? (
+        <EmptyState icon={TrendingUp} title="Not enough data yet" description="Performance signals will appear once employees and attendance are recorded." />
+      ) : (
+        <>
+          <div className="mb-1 flex items-center justify-between text-sm">
+            <span className="font-medium text-gray-700">Attendance rate today</span>
+            <span className="text-gray-500">{rate}%</span>
+          </div>
+          <ProgressBar value={rate} tone={rate >= 80 ? 'green' : rate >= 50 ? 'amber' : 'red'} />
+          <div className="mt-4 grid grid-cols-1 gap-3 text-center sm:grid-cols-3">
+            <div><p className="text-lg font-bold text-gray-900">{formatNumber(stats?.activeEmployees)}</p><p className="text-xs text-gray-400">Active</p></div>
+            <div><p className="text-lg font-bold text-amber-600">{formatNumber(stats?.probation)}</p><p className="text-xs text-gray-400">Probation</p></div>
+            <div><p className="text-lg font-bold text-orange-600">{formatNumber(stats?.noticePeriod)}</p><p className="text-xs text-gray-400">Notice period</p></div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function AdminDashboard({ readOnly = false }) {
   const { user, employee } = useAuth();
   const { data, isLoading, error, refetch } = useDashboardStats();
@@ -345,52 +455,76 @@ function AdminDashboard({ readOnly = false }) {
 
   if (error) return <StatsError error={error} onRetry={refetch} />;
 
+  // Every pending-request queue in the app, not just leave/docs/onboarding/compensation —
+  // attendance corrections/unlocks, profile edit requests and exit requests also count here.
+  const pendingRequests = (stats?.pendingLeave || 0) + (stats?.pendingDocs || 0)
+    + (stats?.pendingOnboarding || 0) + (payload?.pendingCompensationRequests || 0)
+    + (stats?.pendingAttendanceRequests || 0) + (stats?.pendingEditRequests || 0) + (stats?.pendingExitRequests || 0);
+  // Clamped defensively — numerator/denominator already share the same employee
+  // population (see dashboardController.js), but a percentage must never display over 100 regardless.
+  const attendanceRate = stats?.attendanceEligibleEmployees ? Math.min(100, Math.round((stats.presentToday / stats.attendanceEligibleEmployees) * 100)) : 0;
+
   const cards = [
     { label: 'Total Employees', value: formatNumber(stats?.totalEmployees), icon: Users, tone: 'indigo', hint: `${formatNumber(stats?.activeEmployees)} active` },
-    { label: 'Present Today', value: formatNumber(stats?.presentToday), icon: UserCheck, tone: 'green', hint: `${formatNumber(stats?.lateToday)} arrived late` },
-    { label: 'Absent Today', value: formatNumber(stats?.absentToday), icon: UserX, tone: 'red' },
-    { label: 'On Leave', value: formatNumber(stats?.onLeaveEmployees), icon: CalendarClock, tone: 'blue', hint: `${formatNumber(stats?.pendingLeave)} requests pending` },
-    { label: 'Documents to Verify', value: formatNumber(stats?.pendingDocs), icon: FileWarning, tone: 'amber', hint: `${formatNumber(stats?.expiringDocs)} expiring in 30 days` },
-    { label: 'Assets Assigned', value: formatNumber(stats?.assignedAssets), icon: Package, tone: 'purple', hint: `${formatNumber(stats?.availableAssets)} available` },
-    { label: 'Probation', value: formatNumber(stats?.probation), icon: Clock, tone: 'amber' },
-    { label: 'Notice Period', value: formatNumber(stats?.noticePeriod), icon: UserMinus, tone: 'orange' },
+    { label: 'Attendance Today', value: `${attendanceRate}%`, icon: UserCheck, tone: 'green', hint: `${formatNumber(stats?.presentToday)} present` },
+    { label: 'Pending Requests', value: formatNumber(pendingRequests), icon: CalendarClock, tone: 'amber', hint: `${formatNumber(stats?.pendingOnboarding)} onboarding, ${formatNumber(stats?.pendingLeave)} leave` },
+    {
+      // payload.payroll is a real object as soon as the caller can view payroll at
+      // all (payslips: 0 included) — must check payslips > 0, not just truthiness,
+      // or a zero-payslip period would render "₹0" instead of the honest empty
+      // state the detailed PayrollDashboardCard below already shows.
+      label: 'Monthly Payroll',
+      value: payload?.payroll?.payslips > 0 ? formatCurrency(payload.payroll.netPayroll, { compact: true }) : 'No Payslips Yet',
+      icon: Wallet,
+      tone: 'purple',
+      hint: payload?.payroll?.payslips > 0 ? humanise(payload.payroll.status) : 'Not processed',
+    },
   ];
 
   return (
-    <DashboardShell title={`${greetingFor()}, ${displayName}`} subtitle={readOnly ? `Full organisation overview (read-only) — ${formatDate(new Date())}.` : `Full organisation overview — ${formatDate(new Date())}.`}>
-      <QuickActions actions={[
-        ...(readOnly ? [] : [{ to: '/employees/new', label: 'Add Employee', icon: Plus }]),
-        { to: '/attendance', label: 'Attendance', icon: Clock },
-        { to: '/leave', label: 'Leave', icon: CalendarDays },
-        { to: '/payroll', label: 'Payroll', icon: Wallet },
-        { to: '/documents', label: 'Documents', icon: FileText },
-        { to: '/assets', label: 'Assets', icon: Package },
-        { to: '/reports', label: 'Reports', icon: BarChart3 },
-        { to: '/audit', label: 'Audit Logs', icon: ScrollText },
-      ]} />
+    <div>
+      <WorkspaceBar workspace={payload?.workspace} />
+      <DashboardHero
+        title="Manage Your Entire Workforce Efficiently"
+        subtitle="Monitor employees, payroll, attendance, invoices and company operations from one centralized dashboard."
+      />
+      <DashboardShell title={`${greetingFor()}, ${displayName}`} subtitle={readOnly ? `Full organisation overview (read-only) — ${formatDate(new Date())}.` : `Full organisation overview — ${formatDate(new Date())}.`}>
+        <QuickActions actions={[
+          ...(readOnly ? [] : [{ to: '/employees/new', label: 'Add Employee', icon: Plus }]),
+          { to: '/attendance', label: 'Attendance', icon: Clock },
+          { to: '/leave', label: 'Leave', icon: CalendarDays },
+          { to: '/payroll', label: 'Payroll', icon: Wallet },
+          { to: '/documents', label: 'Documents', icon: FileText },
+          { to: '/assets', label: 'Assets', icon: Package },
+          { to: '/reports', label: 'Reports', icon: BarChart3 },
+          { to: '/audit', label: 'Audit Logs', icon: ScrollText },
+        ]} />
 
-      {isLoading ? <StatCardSkeleton count={4} /> : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {cards.map((c) => <StatCard key={c.label} {...c} />)}
+        {isLoading ? <StatCardSkeleton count={4} /> : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {cards.map((c) => <StatCard key={c.label} {...c} />)}
+          </div>
+        )}
+
+        <div className="mt-6"><PayrollDashboardCard payroll={payload?.payroll} /></div>
+
+        {payload?.pendingCompensationRequests > 0 && (
+          <div className="mt-6"><CompensationQueue canAct={!readOnly} /></div>
+        )}
+
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <OrganizationPerformance stats={stats} isLoading={isLoading} />
+          <BirthdaysCard birthdays={payload?.upcomingBirthdays} isLoading={isLoading} />
         </div>
-      )}
 
-      <PayrollSnapshot payroll={payload?.payroll} />
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <DepartmentOverview distribution={payload?.departmentDistribution} isLoading={isLoading} />
+          <AnnouncementsCard announcements={payload?.announcements} isLoading={isLoading} />
+        </div>
 
-      {payload?.pendingCompensationRequests > 0 && (
-        <div className="mt-6"><CompensationQueue canAct={!readOnly} /></div>
-      )}
-
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <DepartmentOverview distribution={payload?.departmentDistribution} isLoading={isLoading} />
-        <BirthdaysCard birthdays={payload?.upcomingBirthdays} isLoading={isLoading} />
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <AnnouncementsCard announcements={payload?.announcements} isLoading={isLoading} />
-        <ActivityFeedCard activity={payload?.recentActivity} isLoading={isLoading} />
-      </div>
-    </DashboardShell>
+        <div className="mt-6"><ActivityFeedCard activity={payload?.recentActivity} isLoading={isLoading} /></div>
+      </DashboardShell>
+    </div>
   );
 }
 
@@ -475,7 +609,7 @@ function LifecycleProgressCard({ title, icon: Icon, meta, isLoading, to }) {
       ) : (
         <>
           <ProgressBar value={pct} tone={pct === 100 ? 'green' : 'primary'} label={`${meta.completed} of ${total} complete`} />
-          <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+          <div className="mt-4 grid grid-cols-1 gap-3 text-center sm:grid-cols-3">
             <div><p className="text-lg font-bold text-gray-500">{meta.notStarted}</p><p className="text-xs text-gray-400">Not started</p></div>
             <div><p className="text-lg font-bold text-amber-600">{meta.inProgress}</p><p className="text-xs text-gray-400">In progress</p></div>
             <div><p className="text-lg font-bold text-green-600">{meta.completed}</p><p className="text-xs text-gray-400">Completed</p></div>
@@ -649,29 +783,167 @@ function AuditorDashboard() {
 /* EMPLOYEE — self-service only                                        */
 /* ------------------------------------------------------------------ */
 
-function EmployeeDashboard() {
-  const { user, employee } = useAuth();
-  const queryClient = useQueryClient();
-  const displayName = employee?.fullName?.split(' ')[0] || user?.email?.split('@')[0];
+/**
+ * Shown instead of the full self-service dashboard while
+ * Employee.onboardingStatus !== APPROVED. Deliberately exposes nothing from
+ * the locked modules (no attendance/leave/payroll/document data) — only
+ * identity, onboarding status, and progress toward completing the wizard.
+ */
+function OnboardingRequiredDashboard({ displayName }) {
+  const { employee } = useAuth();
+  const status = employee?.onboardingStatus || 'NOT_STARTED';
+  const step = employee?.onboardingStep || 0;
+  const pct = Math.round((Math.min(step, 6) / 6) * 100);
 
-  const todayQuery = useQuery({ queryKey: ['attendance', 'today'], queryFn: () => attendanceAPI.today() });
-  const balancesQuery = useQuery({ queryKey: ['leave', 'balances', 'me'], queryFn: () => leaveAPI.myBalances() });
-  const leaveQuery = useQuery({ queryKey: ['leave', 'requests', { limit: 5, mine: true }], queryFn: () => leaveAPI.requests({ limit: 5 }) });
-  const holidaysQuery = useQuery({ queryKey: ['leave', 'holidays', {}], queryFn: () => leaveAPI.holidays() });
-  const payslipsQuery = useQuery({ queryKey: ['payroll', 'payslips', { limit: 3, mine: true }], queryFn: () => payrollAPI.payslips({ limit: 3 }) });
+  const statusCopy = {
+    NOT_STARTED: { label: 'Not started', tone: 'text-gray-600 bg-gray-100', message: "Let's get you set up — complete your onboarding to unlock your workspace." },
+    IN_PROGRESS: { label: 'In progress', tone: 'text-amber-700 bg-amber-100', message: 'Pick up where you left off and finish the remaining steps.' },
+    SUBMITTED: { label: 'Submitted — awaiting approval', tone: 'text-blue-700 bg-blue-100', message: 'Onboarding submitted successfully. Waiting for HR/Admin approval.' },
+    REJECTED: { label: 'Changes requested', tone: 'text-red-700 bg-red-100', message: 'HR/Admin asked for a correction. Review the note below and resubmit.' },
+  }[status] || { label: status, tone: 'text-gray-600 bg-gray-100', message: '' };
+
+  return (
+    <DashboardShell title={`Welcome back, ${displayName}`} subtitle="Complete your onboarding to unlock your workspace.">
+      <div className="card p-6">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+              <BadgeCheck className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Employee ID</p>
+              <p className="text-base font-semibold text-gray-900">{employee?.employeeCode || '—'}</p>
+            </div>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Account status</p>
+            <span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusCopy.tone}`}>{statusCopy.label}</span>
+          </div>
+          <Link to="/onboarding/me" className="btn-primary">
+            <ClipboardCheck className="h-4 w-4" /> Complete Onboarding
+          </Link>
+        </div>
+
+        {statusCopy.message && <p className="mt-5 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700">{statusCopy.message}</p>}
+
+        {status === 'REJECTED' && employee?.onboardingRejectionReason && (
+          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <span className="font-semibold">HR/Admin note: </span>{employee.onboardingRejectionReason}
+          </p>
+        )}
+
+        <div className="mt-6">
+          <div className="mb-1 flex items-center justify-between text-sm">
+            <span className="font-medium text-gray-700">Profile completion</span>
+            <span className="text-gray-500">{status === 'SUBMITTED' ? 100 : pct}%</span>
+          </div>
+          <ProgressBar value={status === 'SUBMITTED' ? 100 : pct} tone={status === 'SUBMITTED' ? 'green' : 'primary'} />
+        </div>
+
+        <div className="mt-6 flex items-center gap-2 text-xs text-gray-400">
+          <Lock className="h-3.5 w-3.5" />
+          Attendance, leave, documents, payroll and other modules stay locked until HR/Admin approves your onboarding.
+        </div>
+      </div>
+    </DashboardShell>
+  );
+}
+
+function EmployeeProfileCard({ employee }) {
+  return (
+    <section className="card p-5">
+      <div className="mb-4 flex items-center gap-2"><Users className="h-4 w-4 text-gray-400" /><h2 className="section-title">My Profile</h2></div>
+      <div className="flex items-center gap-4">
+        <Avatar name={employee?.fullName} size="lg" />
+        <div className="min-w-0">
+          <p className="truncate text-base font-semibold text-gray-900">{employee?.fullName || '—'}</p>
+          <p className="truncate text-xs text-gray-400">{employee?.employeeCode}</p>
+        </div>
+      </div>
+      <dl className="mt-5 space-y-3 text-sm">
+        <div className="flex items-center justify-between gap-4">
+          <dt className="flex items-center gap-1.5 text-gray-500"><Mail className="h-3.5 w-3.5" /> Email</dt>
+          <dd className="truncate font-medium text-gray-900">{employee?.officialEmail || '—'}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="flex items-center gap-1.5 text-gray-500"><Building2 className="h-3.5 w-3.5" /> Department</dt>
+          <dd className="font-medium text-gray-900">{employee?.department || '—'}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="flex items-center gap-1.5 text-gray-500"><Briefcase className="h-3.5 w-3.5" /> Designation</dt>
+          <dd className="font-medium text-gray-900">{employee?.designation || '—'}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-gray-500">Company</dt>
+          <dd className="text-right font-medium text-gray-900">{COMPANY_NAME}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-gray-500">Employment Type</dt>
+          <dd className="font-medium text-gray-900">{employee?.employmentType ? humanise(employee.employmentType) : '—'}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+/**
+ * There is no per-employee "my own activity" API in this codebase — the audit
+ * trail (see server/controllers/notificationController.js getAuditLogs) is
+ * intentionally restricted to AUDIT_ROLES only, and that restriction is
+ * correct to keep. Rather than build a new endpoint/permission for this, the
+ * card is honest about there being nothing to show yet.
+ */
+function RecentActivitiesCard() {
+  return (
+    <section className="card p-5">
+      <div className="mb-4 flex items-center gap-2"><Activity className="h-4 w-4 text-gray-400" /><h2 className="section-title">Recent Activities</h2></div>
+      <p className="py-6 text-center text-sm text-gray-500">No recent activities</p>
+    </section>
+  );
+}
+
+function EmployeeDashboard() {
+  const { user, employee, needsOnboarding } = useAuth();
+  const queryClient = useQueryClient();
+  const displayName = employee?.fullName || user?.email?.split('@')[0];
+
+  // While onboarding is not APPROVED, none of the operational modules below
+  // are reachable server-side either (see requireOnboardingApproved) — skip
+  // firing these requests entirely rather than let them 403.
+  const todayQuery = useQuery({ queryKey: ['attendance', 'today'], queryFn: () => attendanceAPI.today(), enabled: !needsOnboarding });
+  const balancesQuery = useQuery({ queryKey: ['leave', 'balances', 'me'], queryFn: () => leaveAPI.myBalances(), enabled: !needsOnboarding });
+  const leaveQuery = useQuery({ queryKey: ['leave', 'requests', { limit: 5, mine: true }], queryFn: () => leaveAPI.requests({ limit: 5 }), enabled: !needsOnboarding });
+  const approvedLeaveQuery = useQuery({ queryKey: ['leave', 'requests', { status: 'APPROVED', mine: true }], queryFn: () => leaveAPI.requests({ status: 'APPROVED', limit: 1 }), enabled: !needsOnboarding });
+  const holidaysQuery = useQuery({ queryKey: ['leave', 'holidays', {}], queryFn: () => leaveAPI.holidays(), enabled: !needsOnboarding });
+  const payslipsQuery = useQuery({ queryKey: ['payroll', 'payslips', { limit: 3, mine: true }], queryFn: () => payrollAPI.payslips({ limit: 3 }), enabled: !needsOnboarding });
   const checklistQuery = useQuery({
     queryKey: ['documents', 'checklist', employee?._id],
     queryFn: () => documentAPI.checklist(employee._id),
-    enabled: Boolean(employee?._id),
+    enabled: Boolean(employee?._id) && !needsOnboarding,
   });
   const announcementsQuery = useQuery({ queryKey: ['announcements', { limit: 5 }], queryFn: () => announcementAPI.list({ limit: 5 }) });
   const policiesQuery = useQuery({ queryKey: ['policies'], queryFn: () => policyAPI.list() });
+  const performanceQuery = useQuery({ queryKey: ['performance', 'my-reviews'], queryFn: () => performanceAPI.myReviews(), enabled: !needsOnboarding });
+
+  if (needsOnboarding) return <OnboardingRequiredDashboard displayName={displayName} />;
 
   const myToday = todayQuery.data?.data?.data;
   const balances = balancesQuery.data?.data?.data || [];
   const recentLeave = leaveQuery.data?.data?.data || [];
-  const upcomingHolidays = (holidaysQuery.data?.data?.data || []).filter((h) => new Date(h.date) >= new Date(new Date().setHours(0, 0, 0, 0))).slice(0, 4);
+  const approvedLeaveCount = approvedLeaveQuery.data?.data?.meta?.total ?? 0;
+  const allHolidays = holidaysQuery.data?.data?.data || [];
+  const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+  const sortedHolidays = [...allHolidays].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const pastHolidays = sortedHolidays.filter((h) => new Date(h.date) < todayStart).slice(-2);
+  const futureHolidays = sortedHolidays.filter((h) => new Date(h.date) >= todayStart).slice(0, 4);
+  // A short window around today — a couple of recent (Completed) plus the next few (Upcoming) —
+  // rather than the full-year calendar, so the dashboard card stays scannable.
+  const holidayWindow = [...pastHolidays, ...futureHolidays].map((h) => ({ ...h, isPast: new Date(h.date) < todayStart }));
   const payslips = payslipsQuery.data?.data?.data || [];
+  const latestPayslip = payslips[0] || null;
+  const myReviews = performanceQuery.data?.data?.data || [];
+  // myReviews is already sorted newest-first by the server (createdAt: -1).
+  const latestReview = myReviews[0] || null;
   const checklist = checklistQuery.data?.data?.data;
   const announcements = announcementsQuery.data?.data?.data || [];
   const pendingPolicies = (policiesQuery.data?.data?.data || []).filter((p) => p.isAcknowledgementRequired && !p.isAcknowledged);
@@ -696,7 +968,15 @@ function EmployeeDashboard() {
   const pendingLeaveCount = recentLeave.filter((r) => r.status === 'PENDING').length;
 
   return (
-    <DashboardShell title={`${greetingFor()}, ${displayName}`} subtitle="Your personal HR self-service overview.">
+    <DashboardShell
+      title={`Welcome Back, ${displayName}`}
+      subtitle="Manage your work, attendance, payroll, leave requests, and company updates from one unified dashboard."
+    >
+      <div className="card mb-6 flex flex-wrap items-center gap-x-8 gap-y-2 p-4 text-sm">
+        <div><span className="text-gray-400">Employee ID </span><span className="font-semibold text-gray-800">{employee?.employeeCode || '—'}</span></div>
+        <div><span className="text-gray-400">Status </span><StatusBadge status={employee?.status} /></div>
+      </div>
+
       {/* Check-in / check-out */}
       <div className="card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -727,15 +1007,26 @@ function EmployeeDashboard() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Available Leave" value={balancesQuery.isLoading ? '—' : `${totalAvailable} d`} icon={CalendarDays} tone="indigo" />
-        <StatCard label="Used Leave" value={balancesQuery.isLoading ? '—' : `${totalUsed} d`} icon={CalendarClock} tone="purple" />
-        <StatCard label="My Pending Requests" value={pendingLeaveCount} icon={Clock} tone="amber" />
         <StatCard
-          label="Required Documents"
-          value={checklist ? `${checklist.summary.verified}/${checklist.summary.totalRequired} completed` : '—'}
-          icon={FileWarning}
-          tone={checklist && !checklist.summary.isComplete ? 'red' : 'green'}
-          hint={checklist ? (checklist.summary.isComplete ? 'All verified' : `${checklist.summary.missing} missing, ${checklist.summary.rejected} rejected`) : ''}
+          label="Attendance Today"
+          value={myToday?.record ? humanise(myToday.record.status) : 'Not marked'}
+          icon={Clock}
+          tone={myToday?.record ? 'green' : 'gray'}
+        />
+        <StatCard label="Approved Leaves" value={approvedLeaveQuery.isLoading ? '—' : formatNumber(approvedLeaveCount)} icon={CalendarDays} tone="indigo" />
+        <StatCard
+          label="Latest Payslip"
+          value={latestPayslip ? new Date(latestPayslip.year, latestPayslip.month - 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : 'No Payslip'}
+          icon={Receipt}
+          tone={latestPayslip ? 'green' : 'gray'}
+          hint={latestPayslip ? humanise(latestPayslip.status) : ''}
+        />
+        <StatCard
+          label="Performance"
+          value={latestReview?.overallRating != null ? `${latestReview.overallRating.toFixed(1)} / 5` : 'No Reviews Yet'}
+          icon={TrendingUp}
+          tone={latestReview?.overallRating != null ? 'purple' : 'gray'}
+          hint={latestReview ? `${latestReview.reviewPeriod} · ${humanise(latestReview.status)}` : ''}
         />
       </div>
 
@@ -750,6 +1041,11 @@ function EmployeeDashboard() {
           </Link>
         </div>
       )}
+
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <EmployeeProfileCard employee={employee} />
+        <RecentActivitiesCard />
+      </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Leave balances */}
@@ -821,19 +1117,22 @@ function EmployeeDashboard() {
           )}
         </section>
 
-        {/* Upcoming holidays */}
+        {/* Holidays — company calendar, status derived from the real date */}
         <section className="card p-5">
-          <div className="mb-4 flex items-center gap-2"><PartyPopper className="h-4 w-4 text-gray-400" /><h2 className="section-title">Upcoming holidays</h2></div>
+          <div className="mb-4 flex items-center gap-2"><PartyPopper className="h-4 w-4 text-gray-400" /><h2 className="section-title">Holidays</h2></div>
           {holidaysQuery.isLoading ? (
             <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-8 animate-pulse rounded bg-gray-100" />)}</div>
-          ) : !upcomingHolidays.length ? (
-            <p className="py-6 text-center text-sm text-gray-500">No upcoming holidays on the calendar.</p>
+          ) : !holidayWindow.length ? (
+            <p className="py-6 text-center text-sm text-gray-500">No holidays on the calendar.</p>
           ) : (
             <ul className="space-y-2">
-              {upcomingHolidays.map((h) => (
+              {holidayWindow.map((h) => (
                 <li key={h._id} className="flex items-center justify-between text-sm">
                   <span className="text-gray-700">{h.name}</span>
-                  <span className="text-gray-500">{formatDate(h.date)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">{formatDate(h.date)}</span>
+                    <StatusBadge status={h.isPast ? 'COMPLETED' : 'UPCOMING'} tone={h.isPast ? 'gray' : 'blue'} />
+                  </div>
                 </li>
               ))}
             </ul>

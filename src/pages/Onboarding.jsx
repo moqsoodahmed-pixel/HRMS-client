@@ -13,6 +13,9 @@ import {
 import { TASK_STATUSES, TASK_CATEGORIES, DEPARTMENTS } from '../constants';
 import { formatDate, errorMessage, fieldErrors } from '../lib/format';
 
+// Employee self-service onboarding review/approve/reject lives in Manage
+// Employees › Onboarding Submissions now (components/OnboardingApprovals.jsx,
+// reused there) — this page stays focused on the HR task checklist only.
 export default function Onboarding() {
   const [selected, setSelected] = useState(null);
   return selected
@@ -330,7 +333,7 @@ function TaskFormModal({ open, task, employeeId, onClose, onSaved, createFn, upd
         <FormField label="Description">
           <textarea className="input min-h-[70px]" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Category" required error={errors.category}>
             <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={TASK_CATEGORIES} placeholder="Select" />
           </FormField>

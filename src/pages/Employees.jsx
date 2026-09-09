@@ -1,20 +1,77 @@
 import { useState } from 'react';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { useNavigate, Link } from 'react-router-dom';
-import { Plus, Users } from 'lucide-react';
-import { employeeAPI } from '../api/axios';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { Plus, Users, UserCheck, Clock, UserX, FileEdit } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { employeeAPI, onboardingProfileAPI, editRequestAPI } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import OnboardingApprovals from '../components/OnboardingApprovals';
 import {
-  PageHeader, DataTable, Pagination, FilterBar, SearchInput, Select,
-  StatusBadge, Avatar, EmptyState,
+  PageHeader, StatCard, StatCardSkeleton, DataTable, Pagination, FilterBar, SearchInput, Select,
+  StatusBadge, Avatar, EmptyState, Tabs, Modal, FormField,
 } from '../components/ui';
 import { DEPARTMENTS, EMPLOYEE_STATUSES, EMPLOYMENT_TYPES } from '../constants';
-import { humanise } from '../lib/format';
+import { humanise, formatDate, errorMessage } from '../lib/format';
 
 const PAGE_SIZE = 20;
 
 export default function Employees() {
   const { can } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'list');
+
+  // Employee.onboardingStatus already covers every employee (see STEP 1), so
+  // this one list doubles as both the Onboarding Submissions data source and
+  // the Total/Approved/Pending/Rejected summary — no separate counting API.
+  const summaryQuery = useQuery({ queryKey: ['onboarding-profile', 'list', ''], queryFn: () => onboardingProfileAPI.list() });
+  const summaryRows = summaryQuery.data?.data?.data || [];
+  const counts = {
+    total: summaryRows.length,
+    approved: summaryRows.filter((r) => r.onboardingStatus === 'APPROVED').length,
+    pending: summaryRows.filter((r) => r.onboardingStatus === 'SUBMITTED').length,
+    rejected: summaryRows.filter((r) => r.onboardingStatus === 'REJECTED').length,
+  };
+
+  const tabs = [
+    { value: 'list', label: 'Employee List' },
+    { value: 'onboarding', label: 'Onboarding Submissions', count: counts.pending || undefined },
+    { value: 'edit-requests', label: 'Edit Requests' },
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title="Manage Employees"
+        subtitle="Review, approve, and manage employee onboarding requests for your organization."
+        actions={tab === 'list' && can('manageEmployees') && (
+          <Link to="/employees/new" className="btn-primary"><Plus className="h-4 w-4" /> Add employee</Link>
+        )}
+      />
+
+      {summaryQuery.isLoading ? <StatCardSkeleton count={4} /> : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Total Employees" value={counts.total} icon={Users} tone="indigo" />
+          <StatCard label="Approved" value={counts.approved} icon={UserCheck} tone="green" />
+          <StatCard label="Pending" value={counts.pending} icon={Clock} tone="amber" />
+          <StatCard label="Rejected" value={counts.rejected} icon={UserX} tone="red" />
+        </div>
+      )}
+
+      <div className="mt-6">
+        <Tabs tabs={tabs} active={tab} onChange={setTab} />
+        {tab === 'list' && <EmployeeListPanel />}
+        {tab === 'onboarding' && <OnboardingApprovals />}
+        {tab === 'edit-requests' && <EditRequestsPanel />}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Employee List                                                       */
+/* ------------------------------------------------------------------ */
+
+function EmployeeListPanel() {
   const navigate = useNavigate();
 
   const [filters, setFilters] = useState({ search: '', department: '', status: '', employmentType: '', documentStatus: '' });
@@ -33,14 +90,6 @@ export default function Employees() {
 
   return (
     <div>
-      <PageHeader
-        title="Employees"
-        subtitle={meta ? `${meta.total} employee${meta.total === 1 ? '' : 's'} in the system` : 'Manage your workforce'}
-        actions={can('manageEmployees') && (
-          <Link to="/employees/new" className="btn-primary"><Plus className="h-4 w-4" /> Add employee</Link>
-        )}
-      />
-
       <FilterBar onReset={resetFilters}>
         <SearchInput className="min-w-[14rem] flex-1" value={filters.search} onChange={(v) => setFilter('search', v)} placeholder="Search name, code, email…" />
         <div>
@@ -102,6 +151,7 @@ export default function Employees() {
               />
             ),
           },
+          { key: 'onboarding', header: 'Onboarding', render: (emp) => <StatusBadge status={emp.onboardingStatus} /> },
         ]}
         rows={rows}
         isLoading={query.isLoading}
@@ -113,11 +163,134 @@ export default function Employees() {
             icon={Users}
             title="No employees found"
             description="Try adjusting your filters, or add the first employee."
-            action={can('manageEmployees') ? <Link to="/employees/new" className="btn-primary"><Plus className="h-4 w-4" /> Add employee</Link> : null}
           />
         }
         footer={<Pagination page={meta?.page || 1} totalPages={meta?.totalPages} total={meta?.total} limit={PAGE_SIZE} onChange={setPage} />}
       />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Edit Requests — new, minimal flow (see employeeEditRequestController.js) */
+/* ------------------------------------------------------------------ */
+
+const EDIT_REQUEST_FIELD_LABELS = {
+  personalEmail: 'Personal Email',
+  personalMobile: 'Personal Mobile',
+  workLocation: 'Work Location',
+};
+
+function EditRequestsPanel() {
+  const { can } = useAuth();
+  const canDecide = can('manageEmployees');
+  const [status, setStatus] = useState('PENDING');
+  const [rejecting, setRejecting] = useState(null);
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['edit-requests', status],
+    queryFn: () => editRequestAPI.list(status ? { status } : {}),
+  });
+  const rows = query.data?.data?.data || [];
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['edit-requests'] });
+
+  const approve = useMutation({
+    mutationFn: (id) => editRequestAPI.approve(id),
+    onSuccess: () => { toast.success('Edit request approved and applied'); refresh(); },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  const reject = useMutation({
+    mutationFn: ({ id, reason }) => editRequestAPI.reject(id, reason),
+    onSuccess: () => { toast.success('Edit request rejected'); refresh(); setRejecting(null); },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  return (
+    <div>
+      <FilterBar onReset={() => setStatus('')}>
+        <div>
+          <label className="label">Status</label>
+          <Select
+            className="w-44"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            options={[{ value: 'PENDING', label: 'Pending' }, { value: 'APPROVED', label: 'Approved' }, { value: 'REJECTED', label: 'Rejected' }]}
+            placeholder="All statuses"
+          />
+        </div>
+      </FilterBar>
+
+      <DataTable
+        columns={[
+          {
+            key: 'employee',
+            header: 'Employee',
+            render: (r) => (
+              <div className="flex items-center gap-3">
+                <Avatar name={r.employee?.fullName} size="sm" />
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-gray-900">{r.employee?.fullName}</p>
+                  <p className="truncate text-xs text-gray-400">{r.employee?.employeeCode}</p>
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: 'changes',
+            header: 'Requested changes',
+            render: (r) => (
+              <ul className="space-y-0.5 text-xs text-gray-600">
+                {Object.entries(r.changes || {}).map(([field, value]) => (
+                  <li key={field}>
+                    <span className="text-gray-400">{EDIT_REQUEST_FIELD_LABELS[field] || field}:</span>{' '}
+                    <span className="text-gray-400 line-through">{r.employee?.[field] || '—'}</span>{' '}→{' '}
+                    <span className="font-medium text-gray-900">{value || '—'}</span>
+                  </li>
+                ))}
+              </ul>
+            ),
+          },
+          { key: 'submitted', header: 'Submitted', render: (r) => formatDate(r.createdAt) },
+          { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+          ...(canDecide ? [{
+            key: 'actions',
+            header: '',
+            render: (r) => r.status === 'PENDING' && (
+              <div className="flex justify-end gap-2">
+                <button type="button" className="text-xs font-medium text-green-600 hover:underline" onClick={() => approve.mutate(r._id)} disabled={approve.isPending}>Approve</button>
+                <button type="button" className="text-xs font-medium text-red-600 hover:underline" onClick={() => setRejecting(r)}>Reject</button>
+              </div>
+            ),
+          }] : []),
+        ]}
+        rows={rows}
+        isLoading={query.isLoading}
+        error={query.error}
+        onRetry={query.refetch}
+        empty={<EmptyState icon={FileEdit} title="No edit requests" description="Employee-submitted profile change requests will appear here." />}
+      />
+
+      <Modal open={Boolean(rejecting)} onClose={() => setRejecting(null)} title="Reject edit request" size="sm">
+        <form
+          className="space-y-4 p-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const reason = new FormData(e.target).get('reason')?.toString().trim();
+            if (!reason) { toast.error('A reason is required.'); return; }
+            reject.mutate({ id: rejecting._id, reason });
+          }}
+        >
+          <FormField label="Reason" required>
+            <textarea name="reason" className="input min-h-[80px]" />
+          </FormField>
+          <div className="flex justify-end gap-3">
+            <button type="button" className="btn-secondary" onClick={() => setRejecting(null)}>Cancel</button>
+            <button type="submit" className="btn-danger" disabled={reject.isPending}>{reject.isPending ? 'Rejecting…' : 'Reject'}</button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

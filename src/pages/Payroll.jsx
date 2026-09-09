@@ -13,7 +13,7 @@ import {
   Select, Modal, FormField, StatusBadge, Avatar, EmptyState, Tabs, ConfirmDialog, InfoRow,
 } from '../components/ui';
 import { DEPARTMENTS, MONTHS, PAYSLIP_STATUSES } from '../constants';
-import { formatCurrency, formatDate, monthName, errorMessage, fieldErrors, downloadBlob, exportCsv } from '../lib/format';
+import { formatCurrency, formatDate, monthName, humanise, errorMessage, fieldErrors, downloadBlob, exportCsv } from '../lib/format';
 
 const PAGE_SIZE = 20;
 const now = new Date();
@@ -63,40 +63,55 @@ export default function Payroll() {
 
 /* ------------------------------------------------------------------ */
 
-function PayrollSummary() {
+export function PayrollSummary() {
   const [period, setPeriod] = useState({ month: now.getMonth() + 1, year: now.getFullYear() });
   const { data, isLoading } = useQuery({
     queryKey: ['payroll', 'summary', period],
     queryFn: () => payrollAPI.summary(period),
   });
   const s = data?.data?.data;
+  const noPayrollYet = !isLoading && (s?.payslipCount ?? 0) === 0;
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="label">Month</label>
-          <Select
-            className="w-40"
-            value={String(period.month)}
-            onChange={(e) => setPeriod({ ...period, month: Number(e.target.value) })}
-            options={MONTHS.map((m, i) => ({ value: String(i + 1), label: m }))}
-          />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="label">Month</label>
+            <Select
+              className="w-40"
+              value={String(period.month)}
+              onChange={(e) => setPeriod({ ...period, month: Number(e.target.value) })}
+              options={MONTHS.map((m, i) => ({ value: String(i + 1), label: m }))}
+            />
+          </div>
+          <div>
+            <label className="label">Year</label>
+            <Select className="w-28" value={String(period.year)} onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })} options={YEARS} />
+          </div>
         </div>
-        <div>
-          <label className="label">Year</label>
-          <Select className="w-28" value={String(period.year)} onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })} options={YEARS} />
-        </div>
+        {!isLoading && <StatusBadge status={s?.status || 'NOT_STARTED'} />}
       </div>
 
-      {isLoading ? <StatCardSkeleton count={5} /> : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <StatCard label="Total Payroll" value={formatCurrency(s?.grossPayroll, { compact: true })} icon={CircleDollarSign} tone="indigo" hint={`${s?.payslipCount ?? 0} payslip(s)`} />
-          <StatCard label="Employees Paid" value={s?.employeesPaid ?? 0} icon={BadgeCheck} tone="green" hint={formatCurrency(s?.paidAmount, { compact: true })} />
-          <StatCard label="Pending Payroll" value={s?.pendingPayslips ?? 0} icon={Receipt} tone="amber" hint="Structures without a payslip" />
+      {isLoading ? <StatCardSkeleton count={4} /> : (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard label="Payroll Status" value={humanise(s?.status || 'NOT_STARTED')} icon={ClipboardList} tone={s?.status === 'COMPLETE' ? 'green' : s?.status === 'IN_PROGRESS' ? 'amber' : 'gray'} hint={`${monthName(period.month)} ${period.year}`} />
+          <StatCard label="Employees Included" value={s?.activeStructures ?? 0} icon={Users} tone="indigo" hint={`${s?.activeEmployees ?? 0} active employees total`} />
+          <StatCard label="Payslips Issued" value={s?.payslipCount ?? 0} icon={Receipt} tone="blue" hint={`${s?.employeesPaid ?? 0} paid`} />
+          <StatCard label="Pending Actions" value={s?.pendingActions ?? 0} icon={TrendingDown} tone={s?.pendingActions ? 'amber' : 'green'} hint="Employees without a payslip yet" />
+        </div>
+      )}
+
+      {!isLoading && !noPayrollYet && (
+        <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
+          <StatCard label="Total Payroll" value={formatCurrency(s?.grossPayroll, { compact: true })} icon={CircleDollarSign} tone="indigo" />
           <StatCard label="Total Deductions" value={formatCurrency(s?.totalDeductions, { compact: true })} icon={TrendingDown} tone="red" />
           <StatCard label="Net Payroll" value={formatCurrency(s?.netPayroll, { compact: true })} icon={Wallet} tone="purple" />
         </div>
+      )}
+
+      {noPayrollYet && (
+        <p className="mt-4 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-500">No payroll processed yet for {monthName(period.month)} {period.year}.</p>
       )}
 
       {s?.employeesWithoutStructure > 0 && (
@@ -104,6 +119,16 @@ function PayrollSummary() {
           {s.employeesWithoutStructure} active employee(s) have no salary structure yet — they will be skipped when payslips are generated.
         </p>
       )}
+
+      <div className="mt-4 rounded-lg bg-gray-50 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium text-gray-700">{s?.integration?.provider || 'XYZ'} Payroll Integration</span>
+          <StatusBadge status={s?.integration?.status || 'NOT_CONNECTED'} tone="gray" />
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Salary processing is handled by our external payroll partner. This connection isn't set up yet — once it is, sync status and processing details will appear here automatically.
+        </p>
+      </div>
     </div>
   );
 }
@@ -388,7 +413,7 @@ function GeneratePayslipModal({ open, onClose, onSaved }) {
             placeholder="Select an employee"
           />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Month" required>
             <Select value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} options={MONTHS.map((m, i) => ({ value: String(i + 1), label: m }))} />
           </FormField>
@@ -423,7 +448,7 @@ function BulkGenerateModal({ open, onClose, onSaved }) {
     <Modal open={open} onClose={onClose} title="Run monthly payroll" size="sm"
       description="Generates a payslip for every employee with an active salary structure. Employees who already have one for this period are skipped.">
       <div className="space-y-4 p-5">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Month" required>
             <Select value={period.month} onChange={(e) => setPeriod({ ...period, month: e.target.value })} options={MONTHS.map((m, i) => ({ value: String(i + 1), label: m }))} />
           </FormField>
@@ -653,7 +678,7 @@ function SalaryStructureModal({ open, existing, onClose, onSaved }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 rounded-xl bg-gray-50 p-4">
+        <div className="grid grid-cols-1 gap-4 rounded-xl bg-gray-50 p-4 sm:grid-cols-3">
           <div><p className="text-xs text-gray-500">Gross</p><p className="text-lg font-bold text-gray-900">{formatCurrency(gross)}</p></div>
           <div><p className="text-xs text-gray-500">Deductions</p><p className="text-lg font-bold text-red-600">{formatCurrency(totalDeductions)}</p></div>
           <div><p className="text-xs text-gray-500">Net</p><p className="text-lg font-bold text-primary-700">{formatCurrency(gross - totalDeductions)}</p></div>

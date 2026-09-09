@@ -3,6 +3,9 @@
  * These mirror the server-side Mongoose enums — keep the two in step.
  */
 
+/** Shown in the sidebar footer and the employee profile card — the org's display name. */
+export const COMPANY_NAME = 'DutyLaunch Solutions Private Limited';
+
 export const DEPARTMENTS = [
   'Management', 'Engineering', 'Finance', 'Operations', 'HR',
   'Sales', 'Marketing', 'IT', 'Legal', 'Design',
@@ -66,6 +69,26 @@ export const DOCUMENT_CATEGORIES = [
 
 export const IDENTITY_TYPES = ['AADHAAR', 'PAN', 'PASSPORT', 'DRIVING_LICENCE', 'VOTER_ID', 'OTHER'];
 
+/**
+ * UI-only grouping of the free-text DOCUMENT_CATEGORIES above into the
+ * higher-level buckets the reference design shows (Identity/Address/
+ * Education/Experience/Bank/Employment/Other). Purely presentational —
+ * the underlying category string on EmployeeDocument is unchanged.
+ */
+export const DOCUMENT_CATEGORY_GROUPS = {
+  Identity: ['Aadhaar Card', 'PAN Card', 'Passport-size Photo', 'Driving Licence / Passport'],
+  Address: ['Address Proof'],
+  Education: ['Educational Certificates'],
+  Experience: ['Experience Certificate', 'Relieving Letter'],
+  Bank: ['Bank Account Details', 'Cancelled Cheque', 'PF / UAN Details', 'ESI Details'],
+  Employment: ['Offer Letter', 'Contract', 'Nominee Details', 'Emergency Contact Details'],
+  Other: ['Other'],
+};
+
+export function documentCategoryGroup(category) {
+  return Object.entries(DOCUMENT_CATEGORY_GROUPS).find(([, cats]) => cats.includes(category))?.[0] || 'Other';
+}
+
 // Mirrors server/utils/documentRequirements.js — the definitive checklist is
 // computed server-side once the employee exists; this copy is only used to
 // preview what will be required during the "Add Employee" wizard.
@@ -85,7 +108,25 @@ export const POLICY_CATEGORIES = ['HR', 'Conduct', 'IT', 'Finance', 'Compliance'
 
 export const TASK_CATEGORIES = ['Documentation', 'IT Setup', 'IT', 'HR', 'Finance', 'Training', 'Assets', 'Other'];
 
-export const HOLIDAY_TYPES = ['NATIONAL', 'OPTIONAL', 'COMPANY'];
+export const HOLIDAY_TYPES = ['NATIONAL', 'FESTIVAL', 'OPTIONAL', 'COMPANY'];
+
+export const TRAINING_ASSIGNMENT_STATUSES = ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'];
+export const TRAINING_MATERIAL_TYPES = [
+  { value: 'FILE', label: 'Upload a file' },
+  { value: 'VIDEO_URL', label: 'Video URL' },
+  { value: 'LINK', label: 'External link' },
+];
+
+export const PERFORMANCE_REVIEW_STATUSES = ['DRAFT', 'SUBMITTED', 'COMPLETED'];
+
+export const EXIT_REQUEST_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'COMPLETED'];
+export const RATING_LABELS = {
+  1: 'Needs Improvement',
+  2: 'Below Expectations',
+  3: 'Meets Expectations',
+  4: 'Exceeds Expectations',
+  5: 'Outstanding',
+};
 
 /** Accepted upload types, mirroring the server's multer filter. */
 export const ACCEPTED_FILE_TYPES = '.pdf,.jpg,.jpeg,.png,.docx,.csv,.xls,.xlsx';
@@ -112,8 +153,14 @@ export const STATUS_TONES = {
   // Tasks
   TODO: 'gray', IN_PROGRESS: 'blue', COMPLETED: 'green', BLOCKED: 'red', SKIPPED: 'gray',
   NOT_STARTED: 'gray',
+  // Employee self-service onboarding wizard
+  SUBMITTED: 'blue',
   // Announcement priority
   LOW: 'gray', MEDIUM: 'blue', HIGH: 'orange', URGENT: 'red',
+  // Holiday type
+  NATIONAL: 'blue', FESTIVAL: 'purple',
+  // Training assignment status
+  ASSIGNED: 'gray',
 };
 
 export const MONTHS = [

@@ -3,35 +3,11 @@ import { authAPI } from '../api/axios';
 
 const AuthContext = createContext(null);
 
-/**
- * Platform-administrator tier. FOUNDER_CEO and CTO have identical, full
- * effective power and bypass every permission and route check below.
- * SUPER_ADMIN is kept only for backward compatibility with pre-migration
- * accounts/tokens. This mirrors server/utils/roles.js ELEVATED_ROLES exactly
- * — it is the ONLY place on the frontend that ever names an elevated role,
- * so nothing else needs a scattered `|| role === 'CTO'` check.
- */
 const ELEVATED_ROLES = ['FOUNDER_CEO', 'CTO', 'SUPER_ADMIN'];
-
-/**
- * DIRECTOR is a company-wide, READ-ONLY role: it is added to every view*
- * permission below but to NO write/manage/approve permission, so `can()`
- * already returns false for every write action without any per-page change.
- * IT_HEAD is scoped server-side to its own department (see
- * server/utils/roles.js DEPARTMENT_SCOPED_ROLES). PROJECT_HEAD is scoped
- * server-side to itself plus its direct reports, exactly like MANAGER (see
- * server/utils/roles.js TEAM_SCOPED_ROLES) — it is added everywhere MANAGER
- * is, and nowhere MANAGER isn't, so it can never reach unrestricted company
- * administration, payroll administration, or global audit access.
- */
 const READ_ONLY_ROLES = ['DIRECTOR'];
 const DEPARTMENT_SCOPED_ROLES = ['IT_HEAD'];
 const TEAM_SCOPED_ROLES = ['MANAGER', 'PROJECT_HEAD'];
 
-/**
- * UI-level permission map. The backend is always the authority — these flags only
- * decide what is worth rendering, never what is actually allowed.
- */
 const PERMISSIONS = {
   // Employees
   viewEmployees: ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
@@ -45,10 +21,9 @@ const PERMISSIONS = {
   manageLeaveSettings: ['HR_ADMIN'],
   applyLeave: ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
   viewTeamFilters: ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
-  // Payroll — IT_HEAD/PROJECT_HEAD/MANAGER are deliberately excluded from every payroll permission.
+  // Payroll
   viewPayroll: ['HR_ADMIN', 'FINANCE', 'DIRECTOR'],
   managePayroll: ['FINANCE'],
-  // Compensation change requests — HR requests, only the elevated tier approves.
   requestCompensationChange: ['HR_ADMIN'],
   viewCompensationRequests: ['HR_ADMIN', 'FINANCE', 'DIRECTOR'],
   approveCompensationChange: [],
@@ -61,11 +36,23 @@ const PERMISSIONS = {
   manageAssets: ['HR_ADMIN'],
   viewLifecycle: ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
   manageLifecycle: ['HR_ADMIN'],
-  // Reporting — payroll reports stay out of IT_HEAD's/PROJECT_HEAD's reach.
+  // Reporting
   viewReports: ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'AUDITOR', 'DIRECTOR', 'IT_HEAD'],
   viewPayrollReports: ['HR_ADMIN', 'FINANCE', 'AUDITOR', 'DIRECTOR'],
   viewAudit: ['AUDITOR', 'DIRECTOR'],
+  // Training & performance reviews
+  manageTraining: ['HR_ADMIN'],
+  managePerformanceReviews: ['HR_ADMIN'],
+  // Sales leads — all roles can view; upload is gated server-side to elevated
+  viewLeads: ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
+  uploadLeads: [], // elevated only — isElevated() handles this, so empty here
 };
+
+export const ONBOARDING_LOCKED_ROUTES = [
+  '/attendance', '/leave', '/payroll', '/documents', '/exit', '/training', '/performance', '/assets',
+];
+
+export const ONBOARDING_ROUTE = '/onboarding/me';
 
 /** Which sidebar entries / routes each role may open (null = every signed-in role). */
 export const ROUTE_ACCESS = {
@@ -82,6 +69,13 @@ export const ROUTE_ACCESS = {
   '/offboarding': ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
   '/reports': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'AUDITOR', 'DIRECTOR', 'IT_HEAD'],
   '/audit': ['AUDITOR', 'DIRECTOR'],
+  '/settings': [],
+  '/onboarding/me': null,
+  '/training': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
+  '/performance': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
+  '/exit': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
+  // Sales Leads — all authenticated roles may view the leads page
+  '/sales-leads': null,
 };
 
 export function AuthProvider({ children }) {
@@ -97,7 +91,6 @@ export function AuthProvider({ children }) {
         setUser(r.data.data.user);
         setEmployee(r.data.data.employee);
       })
-      // A 401 here simply means nobody is signed in yet.
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -122,21 +115,21 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => {
     const role = user?.role;
     const isElevated = ELEVATED_ROLES.includes(role);
+    const needsOnboarding = role === 'EMPLOYEE' && Boolean(employee) && employee.onboardingStatus !== 'APPROVED';
     return {
       user,
       employee,
       role,
       isElevated,
-      /** True for the company-wide, view-only DIRECTOR role — never true for an elevated role. */
+      needsOnboarding,
+      onboardingStatus: employee?.onboardingStatus,
+      isRouteLocked: (path) => needsOnboarding && ONBOARDING_LOCKED_ROUTES.includes(path),
       isReadOnly: READ_ONLY_ROLES.includes(role),
-      /** True for a role restricted to its own department (e.g. IT_HEAD). */
       isDepartmentScoped: DEPARTMENT_SCOPED_ROLES.includes(role),
-      /** True for a role restricted to itself plus its direct reports (MANAGER, PROJECT_HEAD). */
       isTeamScoped: TEAM_SCOPED_ROLES.includes(role),
       loading,
       login,
       logout,
-      /** `can('managePayroll')` — elevated roles (FOUNDER_CEO/CTO) always pass. */
       can: (permission) => Boolean(role) && (isElevated || Boolean(PERMISSIONS[permission]?.includes(role))),
       hasRole: (...roles) => Boolean(role && roles.includes(role)),
       canAccess: (path) => {

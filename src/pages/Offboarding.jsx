@@ -2,29 +2,211 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   UserMinus, ArrowLeft, Plus, CheckCircle2, Clock, ListChecks, AlertTriangle, Sparkles,
-  ShieldCheck, Laptop, Wallet, Package, ClipboardCheck,
+  ShieldCheck, Laptop, Wallet, Package, ClipboardCheck, XCircle, CalendarClock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { offboardingAPI, employeeAPI } from '../api/axios';
+import { offboardingAPI, employeeAPI, exitRequestAPI } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
   PageHeader, StatCard, StatCardSkeleton, DataTable, FilterBar, SearchInput, Select,
-  Modal, FormField, StatusBadge, Avatar, EmptyState, ProgressBar, LoadingBlock, ErrorState, InfoRow,
+  Modal, FormField, StatusBadge, Avatar, EmptyState, ProgressBar, LoadingBlock, ErrorState, InfoRow, Tabs,
 } from '../components/ui';
-import { TASK_STATUSES, TASK_CATEGORIES, DEPARTMENTS } from '../constants';
+import { TASK_STATUSES, TASK_CATEGORIES, DEPARTMENTS, EXIT_REQUEST_STATUSES } from '../constants';
 import { formatCurrency, formatDate, monthName, errorMessage, fieldErrors } from '../lib/format';
 
 export default function Offboarding() {
+  const [tab, setTab] = useState('requests');
   const [selected, setSelected] = useState(null);
   const [initiating, setInitiating] = useState(false);
-  return selected
-    ? <OffboardingDetail employee={selected} onBack={() => setSelected(null)} />
-    : (
-      <>
-        <OffboardingOverview onSelect={setSelected} onInitiate={() => setInitiating(true)} />
-        <InitiateOffboardingModal open={initiating} onClose={() => setInitiating(false)} onStarted={(emp) => { setInitiating(false); setSelected(emp); }} />
-      </>
-    );
+
+  return (
+    <div>
+      <PageHeader title="Exit Management" subtitle="Manage and review employee exit requests" />
+      <Tabs
+        tabs={[{ value: 'requests', label: 'Exit Requests' }, { value: 'checklist', label: 'Offboarding Checklist' }]}
+        active={tab}
+        onChange={(v) => { setTab(v); setSelected(null); }}
+      />
+      {tab === 'requests' ? (
+        <ExitRequestsPanel onOpenChecklist={(emp) => { setTab('checklist'); setSelected(emp); }} />
+      ) : selected ? (
+        <OffboardingDetail employee={selected} onBack={() => setSelected(null)} />
+      ) : (
+        <>
+          <OffboardingOverview onSelect={setSelected} onInitiate={() => setInitiating(true)} />
+          <InitiateOffboardingModal open={initiating} onClose={() => setInitiating(false)} onStarted={(emp) => { setInitiating(false); setSelected(emp); }} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Exit Requests — employee-initiated (new, minimal — see STEP 10)      */
+/* ------------------------------------------------------------------ */
+
+function ExitRequestsPanel({ onOpenChecklist }) {
+  const { can } = useAuth();
+  const canDecide = can('manageLifecycle');
+  const [filters, setFilters] = useState({ status: '', department: '', search: '' });
+  const [viewing, setViewing] = useState(null);
+  const [rejecting, setRejecting] = useState(null);
+  const queryClient = useQueryClient();
+
+  const query = useQuery({ queryKey: ['exit-requests', filters], queryFn: () => exitRequestAPI.list(filters) });
+  const rows = query.data?.data?.data || [];
+  const pending = rows.filter((r) => r.status === 'PENDING').length;
+  const approved = rows.filter((r) => r.status === 'APPROVED').length;
+  const completed = rows.filter((r) => r.status === 'COMPLETED').length;
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['exit-requests'] });
+
+  const approve = useMutation({
+    mutationFn: (id) => exitRequestAPI.approve(id),
+    onSuccess: () => { toast.success('Exit approved — offboarding checklist created'); refresh(); setViewing(null); },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  const reject = useMutation({
+    mutationFn: ({ id, reason }) => exitRequestAPI.reject(id, reason),
+    onSuccess: () => { toast.success('Exit request rejected'); refresh(); setRejecting(null); setViewing(null); },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  const complete = useMutation({
+    mutationFn: (id) => exitRequestAPI.complete(id),
+    onSuccess: () => { toast.success('Exit marked complete'); refresh(); setViewing(null); },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  return (
+    <div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Total Exit Requests" value={rows.length} icon={UserMinus} tone="indigo" />
+        <StatCard label="Pending" value={pending} icon={Clock} tone="amber" />
+        <StatCard label="Approved (Notice Period)" value={approved} icon={CalendarClock} tone="blue" />
+        <StatCard label="Completed" value={completed} icon={CheckCircle2} tone="green" />
+      </div>
+
+      <div className="mt-6">
+        <FilterBar onReset={() => setFilters({ status: '', department: '', search: '' })}>
+          <SearchInput className="min-w-[14rem] flex-1" value={filters.search} onChange={(v) => setFilters({ ...filters, search: v })} placeholder="Search employee…" />
+          <div>
+            <label className="label">Department</label>
+            <Select className="w-44" value={filters.department} onChange={(e) => setFilters({ ...filters, department: e.target.value })} options={DEPARTMENTS} placeholder="All departments" />
+          </div>
+          <div>
+            <label className="label">Status</label>
+            <Select className="w-40" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} options={EXIT_REQUEST_STATUSES} placeholder="All statuses" />
+          </div>
+        </FilterBar>
+
+        <DataTable
+          columns={[
+            {
+              key: 'employee',
+              header: 'Employee',
+              render: (r) => (
+                <div className="flex items-center gap-3">
+                  <Avatar name={r.employee?.fullName} size="sm" />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-gray-900">{r.employee?.fullName}</p>
+                    <p className="truncate text-xs text-gray-400">{r.employee?.employeeCode}</p>
+                  </div>
+                </div>
+              ),
+            },
+            { key: 'department', header: 'Department', render: (r) => r.employee?.department },
+            { key: 'designation', header: 'Designation', render: (r) => r.employee?.designation },
+            { key: 'noticePeriod', header: 'Notice Period', render: (r) => (r.noticePeriodDays != null ? `${r.noticePeriodDays} days` : '—') },
+            { key: 'lastWorkingDate', header: 'Last Working Date', render: (r) => formatDate(r.requestedLastWorkingDate) },
+            { key: 'reason', header: 'Reason', render: (r) => <span className="block max-w-[10rem] truncate text-xs text-gray-500" title={r.reason}>{r.reason}</span> },
+            { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+            {
+              key: 'actions',
+              header: 'Actions',
+              render: (r) => (
+                <div className="flex justify-end gap-2">
+                  <button type="button" className="text-xs font-medium text-primary-600 hover:underline" onClick={() => setViewing(r)}>View</button>
+                  {canDecide && r.status === 'PENDING' && (
+                    <>
+                      <button type="button" className="text-xs font-medium text-green-600 hover:underline" onClick={() => approve.mutate(r._id)} disabled={approve.isPending}>Approve</button>
+                      <button type="button" className="text-xs font-medium text-red-600 hover:underline" onClick={() => setRejecting(r)}>Reject</button>
+                    </>
+                  )}
+                  {canDecide && r.status === 'APPROVED' && (
+                    <button type="button" className="text-xs font-medium text-primary-600 hover:underline" onClick={() => complete.mutate(r._id)} disabled={complete.isPending}>Mark Complete</button>
+                  )}
+                </div>
+              ),
+            },
+          ]}
+          rows={rows}
+          isLoading={query.isLoading}
+          error={query.error}
+          onRetry={query.refetch}
+          empty={<EmptyState icon={UserMinus} title="No exit requests" description="Employee-submitted exit requests will appear here." />}
+        />
+      </div>
+
+      <Modal open={Boolean(viewing)} onClose={() => setViewing(null)} title={viewing ? `Exit Request — ${viewing.employee?.fullName}` : ''} size="md">
+        {viewing && (
+          <div className="space-y-4 p-5">
+            <div className="grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-4">
+              <InfoRow label="Department" value={viewing.employee?.department} />
+              <InfoRow label="Designation" value={viewing.employee?.designation} />
+              <InfoRow label="Notice Period" value={viewing.noticePeriodDays != null ? `${viewing.noticePeriodDays} days` : '—'} />
+              <InfoRow label="Last Working Date" value={formatDate(viewing.requestedLastWorkingDate)} />
+              <InfoRow label="Status" value={<StatusBadge status={viewing.status} />} />
+              <InfoRow label="Submitted" value={formatDate(viewing.createdAt)} />
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Reason</p>
+              <p className="text-sm text-gray-700">{viewing.reason}</p>
+            </div>
+            {viewing.comments && (
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Comments</p>
+                <p className="text-sm text-gray-700">{viewing.comments}</p>
+              </div>
+            )}
+            {viewing.status === 'REJECTED' && viewing.rejectionReason && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{viewing.rejectionReason}</p>
+            )}
+            {viewing.status === 'APPROVED' && (
+              <button type="button" className="text-sm font-medium text-primary-600 hover:underline" onClick={() => onOpenChecklist(viewing.employee)}>
+                Open offboarding checklist →
+              </button>
+            )}
+            {canDecide && viewing.status === 'PENDING' && (
+              <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
+                <button type="button" className="btn-danger" onClick={() => setRejecting(viewing)}><XCircle className="h-4 w-4" /> Reject</button>
+                <button type="button" className="btn-primary" onClick={() => approve.mutate(viewing._id)} disabled={approve.isPending}><CheckCircle2 className="h-4 w-4" /> Approve</button>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={Boolean(rejecting)} onClose={() => setRejecting(null)} title="Reject exit request" size="sm">
+        <form
+          className="space-y-4 p-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const reason = new FormData(e.target).get('reason')?.toString().trim();
+            if (!reason) { toast.error('A reason is required.'); return; }
+            reject.mutate({ id: rejecting._id, reason });
+          }}
+        >
+          <FormField label="Reason" required>
+            <textarea name="reason" className="input min-h-[80px]" />
+          </FormField>
+          <div className="flex justify-end gap-3">
+            <button type="button" className="btn-secondary" onClick={() => setRejecting(null)}>Cancel</button>
+            <button type="submit" className="btn-danger" disabled={reject.isPending}>{reject.isPending ? 'Rejecting…' : 'Reject'}</button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -41,15 +223,14 @@ function OffboardingOverview({ onSelect, onInitiate }) {
 
   return (
     <div>
-      <PageHeader
-        title="Offboarding"
-        subtitle="Exit formalities, clearances and final settlement"
-        actions={can('manageLifecycle') && (
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm text-gray-500">Exit formalities, clearances and final settlement checklist</p>
+        {can('manageLifecycle') && (
           <button type="button" className="btn-primary" onClick={onInitiate}>
             <Plus className="h-4 w-4" /> Initiate offboarding
           </button>
         )}
-      />
+      </div>
 
       {query.isLoading ? <StatCardSkeleton count={4} /> : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -400,7 +581,7 @@ function TaskFormModal({ open, task, employeeId, onClose, onSaved, createFn, upd
         <FormField label="Description">
           <textarea className="input min-h-[70px]" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Category" required error={errors.category}>
             <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={TASK_CATEGORIES} placeholder="Select" />
           </FormField>
@@ -474,7 +655,7 @@ function InitiateOffboardingModal({ open, onClose, onStarted }) {
             placeholder="Select an employee"
           />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Last working day" required error={errors.dateOfExit}>
             <input type="date" className="input" value={form.dateOfExit} onChange={(e) => setForm({ ...form, dateOfExit: e.target.value })} />
           </FormField>
