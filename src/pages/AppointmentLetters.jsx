@@ -174,6 +174,7 @@ function buildBlocks(f) {
       <p style={{ marginBottom: '4mm' }}><strong>Date:</strong> {ph(f.dateOfIssue, 'DD Month YYYY')}</p>
       <p style={{ marginBottom: '0', fontWeight: 'bold' }}>To,</p>
       <p style={{ marginBottom: '0' }}>{ph(f.employeeFullName, 'Employee Full Name')}</p>
+      {f.employeeCode && <p style={{ marginBottom: '0' }}>{f.employeeCode}</p>}
       <p style={{ marginBottom: '4mm' }}>Subject: Appointment as {ph(f.designation, 'Designation')}</p>
       <p style={{ marginBottom: '4mm' }}>Dear {ph(f.employeeFirstName || f.employeeFullName, 'First Name')},</p>
     </div>
@@ -421,7 +422,7 @@ function buildBlocks(f) {
   // per-party KeepTogether groups) so labels/underscores never split away
   // from the value above them, even when the value is very long.
   push(
-    <div data-page-break-before="always" style={{ marginTop: '8mm', ...bodyStyle }}>
+    <div data-page-break-before="always" style={{ marginTop: '23mm', ...bodyStyle }}>
       <p style={{ fontWeight: 'bold' }}>For {co.toUpperCase()}</p>
       <p style={{ marginTop: '2mm' }}>Authorized Signatory</p>
       <p>Name: {ph(f.authorizedSignatoryName, 'Signatory Name')}</p>
@@ -432,7 +433,7 @@ function buildBlocks(f) {
   );
 
   push(
-    <div style={{ marginTop: '8mm', borderTop: '1px solid #ccc', paddingTop: '4mm', ...bodyStyle }}>
+    <div style={{ marginTop: '89px', borderTop: '1px solid #ccc', paddingTop: '4mm', ...bodyStyle }}>
       <p style={{ fontWeight: 'bold' }}>EMPLOYEE ACKNOWLEDGEMENT AND ACCEPTANCE</p>
       <p style={{ marginTop: '2mm', textAlign: 'justify' }}>
         I, {ph(f.employeeFullName, 'Employee Name')}, acknowledge that I have received, read and
@@ -440,7 +441,7 @@ function buildBlocks(f) {
         with {co}.
       </p>
       <p style={{ marginTop: '4mm' }}>Employee Name: {ph(f.employeeFullName, 'Name')}</p>
-      <p>Signature: ______________________________</p>
+      <p style={{ marginTop: '8mm' }}>Signature: ______________________________</p>
       <p>Date: {ph(f.dateOfIssue, 'Date')}</p>
     </div>
   );

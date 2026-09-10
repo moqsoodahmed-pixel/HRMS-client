@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Phone, Mail, Building2, Upload, Search, RefreshCw, ChevronLeft, ChevronRight,
   BarChart3, Users, TrendingUp, Eye, Edit2, RotateCcw, AlertCircle, CheckCircle2,
@@ -464,6 +464,40 @@ export default function SalesLeads() {
   const isMgmt = MGMT_ROLES.includes(role) || isElevated;
   const isEmployee = role === 'EMPLOYEE';
 
+  // Reveal state — only one lead at a time, 10s timer
+  const [revealed, setRevealed] = useState(null); // { leadId, email, phone, countdown }
+  const revealTimerRef = useRef(null);
+  const revealCountRef = useRef(null);
+
+  const clearReveal = useCallback(() => {
+    clearInterval(revealTimerRef.current);
+    clearInterval(revealCountRef.current);
+    setRevealed(null);
+  }, []);
+
+  const handleReveal = useCallback(async (leadId) => {
+    // Cancel any existing reveal first
+    clearReveal();
+    try {
+      const res = await leadsAPI.reveal(leadId);
+      const { email, phone } = res.data.data;
+      setRevealed({ leadId, email, phone, countdown: 10 });
+      // Countdown ticker
+      revealCountRef.current = setInterval(() => {
+        setRevealed(prev => {
+          if (!prev) return null;
+          if (prev.countdown <= 1) { clearReveal(); return null; }
+          return { ...prev, countdown: prev.countdown - 1 };
+        });
+      }, 1000);
+    } catch {
+      // silently fail
+    }
+  }, [clearReveal]);
+
+  // Clean up on unmount
+  useEffect(() => () => clearReveal(), [clearReveal]);
+
   const [leads, setLeads] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -599,15 +633,43 @@ export default function SalesLeads() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          {lead.phone && (
-                            <div className="flex items-center gap-1 text-xs text-gray-600">
-                              <Phone className="h-3 w-3" />{lead.phone}
-                            </div>
-                          )}
-                          {lead.email && (
-                            <div className="flex items-center gap-1 text-xs text-gray-600">
-                              <Mail className="h-3 w-3" />{lead.email}
-                            </div>
+                          {isEmployee ? (
+                            // EMPLOYEE: masked by default, reveal one at a time for 10s
+                            revealed?.leadId === lead._id ? (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1 text-xs text-gray-700 font-medium">
+                                  <Phone className="h-3 w-3 text-green-600" />{revealed.phone || '—'}
+                                </div>
+                                <div className="flex items-center gap-1 text-xs text-gray-700 font-medium">
+                                  <Mail className="h-3 w-3 text-blue-600" />{revealed.email || '—'}
+                                </div>
+                                <div className="flex items-center gap-1 mt-1">
+                                  <span className="text-xs text-orange-500 font-semibold">Hiding in {revealed.countdown}s</span>
+                                  <button onClick={clearReveal} className="text-xs text-gray-400 hover:text-gray-600 underline">Hide now</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleReveal(lead._id)}
+                                className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800 font-medium border border-primary-200 rounded px-2 py-1 hover:bg-primary-50 transition-colors"
+                              >
+                                <Eye className="h-3 w-3" /> Reveal (10s)
+                              </button>
+                            )
+                          ) : (
+                            // Management: always visible
+                            <>
+                              {lead.phone && (
+                                <div className="flex items-center gap-1 text-xs text-gray-600">
+                                  <Phone className="h-3 w-3" />{lead.phone}
+                                </div>
+                              )}
+                              {lead.email && (
+                                <div className="flex items-center gap-1 text-xs text-gray-600">
+                                  <Mail className="h-3 w-3" />{lead.email}
+                                </div>
+                              )}
+                            </>
                           )}
                         </td>
                         {isMgmt && (

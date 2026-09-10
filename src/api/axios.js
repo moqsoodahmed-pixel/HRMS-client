@@ -330,6 +330,7 @@ export const leadsAPI = {
   stats: (params) => api.get('/leads/stats', { params: clean(params) }),
   batches: () => api.get('/leads/batches'),
   deleteBatch: (batch) => api.delete(`/leads/batch/${encodeURIComponent(batch)}`),
+  reveal: (id) => api.post(`/leads/${id}/reveal`),
 };
 
 export const dailyReportAPI = {
