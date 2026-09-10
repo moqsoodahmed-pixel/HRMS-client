@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect, useRef, Fragment } from 'react';
 import {
   Plus, RefreshCw, Eye, Download, FileText, X, User, Search,
-  ChevronLeft, ChevronRight, Save, Zap, AlertCircle, CheckCircle2,
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Save, Zap, AlertCircle, CheckCircle2,
   Trash2, Edit2, RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -9,23 +9,18 @@ import { appointmentLetterAPI, employeeAPI } from '../api/axios';
 import { PageHeader, EmptyState, LoadingBlock } from '../components/ui';
 import { LETTERHEAD_HEADER, LETTERHEAD_FOOTER } from '../assets/letterheadImages';
 
-// ── Role-specific default duties ────────────────────────────────────────────
+// ── Designation options + role-specific default duties ─────────────────────
+// Kept in sync with ROLES / ROLE_DUTIES in HRMS-server/utils/generate_appointment.py
+const DESIGNATIONS = [
+  'Sales Executive',
+  'Business Development (BD) Executive',
+  'Digital Marketing Executive',
+  'HR Executive',
+  'Operations Executive',
+  'Accounts Executive',
+];
+
 const ROLE_DUTIES = {
-  'Full Stack Engineer': [
-    'Managing technical projects from requirement gathering through successful delivery.',
-    'Leading software development, integration and implementation activities.',
-    'Understanding client requirements and converting them into practical technical solutions.',
-    'Coordinating with clients, developers, vendors, designers and internal teams.',
-    'Planning and monitoring project timelines, milestones, deliverables, quality and client satisfaction.',
-    'Developing, reviewing, testing, debugging and maintaining software applications as assigned.',
-    'Supporting deployment, maintenance, troubleshooting and post-delivery technical support.',
-    'Supporting technical product/service sales, demonstrations, proposals and client conversions where required.',
-    'Identifying opportunities for additional technical products, services, automation and process improvements.',
-    'Providing technical guidance, documentation and project updates to management.',
-    'Maintaining appropriate technical documentation, source-control practices and project records.',
-    'Ensuring timely completion and delivery of assigned work.',
-    'Performing other reasonable duties and responsibilities assigned by the Company from time to time.',
-  ],
   'Sales Executive': [
     'Identifying and approaching potential clients to generate new business opportunities.',
     'Managing the complete sales cycle from prospecting to closure.',
@@ -39,7 +34,7 @@ const ROLE_DUTIES = {
     'Participating in marketing events, trade shows and client meetings as required.',
     'Performing other reasonable duties and responsibilities assigned by the Company from time to time.',
   ],
-  'Business Development Executive': [
+  'Business Development (BD) Executive': [
     'Identifying, evaluating and pursuing new business opportunities and strategic partnerships.',
     'Developing and maintaining a robust pipeline of qualified business prospects.',
     'Conducting market research to identify trends, opportunities and competitive positioning.',
@@ -48,6 +43,18 @@ const ROLE_DUTIES = {
     'Tracking and reporting on business development activities, conversions and revenue targets.',
     'Collaborating with product, marketing and operations teams on go-to-market strategies.',
     'Participating in industry events, networking activities and client meetings.',
+    'Performing other reasonable duties and responsibilities assigned by the Company from time to time.',
+  ],
+  'Digital Marketing Executive': [
+    'Planning, executing and monitoring digital marketing campaigns across social media, search and email channels.',
+    'Creating, scheduling and publishing content across the Company’s digital platforms.',
+    'Managing paid advertising campaigns and optimising budget allocation for performance.',
+    'Monitoring website and campaign analytics and preparing performance reports.',
+    'Conducting keyword research, on-page and off-page SEO activities to improve organic visibility.',
+    'Coordinating with designers, content writers and vendors for marketing collateral.',
+    'Managing the Company’s social media presence and engagement with followers.',
+    'Tracking industry trends, competitor activity and emerging digital marketing tools.',
+    'Supporting lead-generation initiatives and coordinating with the sales team on qualified leads.',
     'Performing other reasonable duties and responsibilities assigned by the Company from time to time.',
   ],
   'HR Executive': [
@@ -61,20 +68,30 @@ const ROLE_DUTIES = {
     'Ensuring compliance with applicable labour laws and company HR policies.',
     'Performing other reasonable duties and responsibilities assigned by the Company from time to time.',
   ],
-  'Project Manager': [
-    'Planning, executing and delivering projects within defined scope, timeline and budget.',
-    'Coordinating with cross-functional teams, clients and stakeholders throughout the project lifecycle.',
-    'Defining project requirements, milestones, deliverables and success criteria.',
-    'Monitoring project progress, identifying risks and implementing mitigation strategies.',
-    'Conducting regular project status meetings and providing updates to senior management.',
-    'Managing project documentation, change requests and version control.',
-    'Ensuring quality standards are maintained throughout project delivery.',
-    'Allocating and managing project resources effectively.',
+  'Operations Executive': [
+    'Supporting day-to-day operational activities to ensure smooth functioning of business processes.',
+    'Monitoring workflows, timelines and resource allocation across ongoing operations.',
+    'Coordinating with internal departments and external vendors to resolve operational issues.',
+    'Maintaining operational records, reports, dashboards and documentation.',
+    'Identifying process inefficiencies and supporting implementation of process improvements.',
+    'Ensuring adherence to Company policies, quality standards and compliance requirements.',
+    'Assisting with procurement, inventory and logistics coordination as applicable.',
+    'Escalating operational risks and issues to management in a timely manner.',
+    'Performing other reasonable duties and responsibilities assigned by the Company from time to time.',
+  ],
+  'Accounts Executive': [
+    'Maintaining day-to-day books of accounts, ledgers and financial records accurately.',
+    'Processing invoices, payments, receipts and reconciliations in a timely manner.',
+    'Assisting with GST, TDS and other statutory filings and compliance requirements.',
+    'Supporting payroll processing and employee reimbursement verification.',
+    'Preparing financial reports, MIS statements and account summaries for management review.',
+    'Coordinating with auditors, banks and vendors on financial and accounting matters.',
+    'Monitoring accounts receivable/payable and following up on outstanding dues.',
     'Performing other reasonable duties and responsibilities assigned by the Company from time to time.',
   ],
 };
 
-const DEFAULT_DUTIES = ROLE_DUTIES['Full Stack Engineer'];
+const DEFAULT_DUTIES = ROLE_DUTIES['Sales Executive'];
 
 function getDutiesForDesignation(designation) {
   if (!designation) return DEFAULT_DUTIES;
@@ -85,284 +102,632 @@ function getDutiesForDesignation(designation) {
   return DEFAULT_DUTIES;
 }
 
-// ── A4 Live Preview ──────────────────────────────────────────────────────────
-// Renders an accurate A4-proportioned page preview matching the actual PDF output.
-function A4Preview({ f }) {
-  const ph = (v, label) => v
-    ? <span>{v}</span>
-    : <span className="text-red-400 italic text-[10px]">{'<<'}{label}{'>>'}</span>;
+// ── A4 page geometry — derived from the real letterhead PNG aspect ratios ──
+// header.png 1656x270 (ratio 6.133), footer.png 1656x380 (ratio 4.358), same
+// values the PDF generator computes from the image files at runtime.
+const A4_WIDTH_MM = 210;
+const A4_HEIGHT_MM = 297;
+const HDR_ASPECT = 4.9922;
+const FTR_ASPECT = 4.0831;
+const HDR_H_MM = A4_WIDTH_MM / HDR_ASPECT;   // ~34.24mm
+const FTR_H_MM = A4_WIDTH_MM / FTR_ASPECT;   // ~48.19mm
+const SAFETY_GAP_MM = 5.64;                  // ~16pt, matches server SAFETY_GAP
+const MARGIN_MM = 19.4;                      // ~55pt, matches server ML/MR
+const BODY_USABLE_H_MM = A4_HEIGHT_MM - HDR_H_MM - FTR_H_MM - 2 * SAFETY_GAP_MM;
 
-  const duties = f.duties?.length > 0 ? f.duties : getDutiesForDesignation(f.designation);
-  const comp = f.compensation;
-  const cwords = f.compensationWords;
-  const co = f.registeredCompanyName || 'DutyLaunch Solutions Private Limited';
+const bodyStyle = {
+  fontSize: '9.5pt',
+  lineHeight: '1.52',
+  color: '#1a1a1a',
+  wordWrap: 'break-word',
+  overflowWrap: 'anywhere',
+};
 
-  // A4 ratio: 210:297 = 1:1.4142
-  return (
-    <div className="flex flex-col items-center overflow-y-auto h-full bg-gray-300 py-4 px-2 gap-4">
-      {/* Single A4 page representation */}
-      <div
-        className="bg-white shadow-xl flex-shrink-0 overflow-hidden"
-        style={{
-          width: '210mm',
-          minHeight: '297mm',
-          position: 'relative',
-          fontFamily: 'Arial, Helvetica, sans-serif',
-        }}
-      >
-        {/* ── HEADER ── */}
-        <div style={{ width: '100%', height: '31mm', position: 'relative', backgroundColor: '#f0f0f0' }}>
-          <img
-            src={LETTERHEAD_HEADER}
-            alt="letterhead header"
-            style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
-          />
-        </div>
-
-        {/* ── BODY ── */}
-        <div style={{
-          margin: '0 19.5mm',
-          paddingTop: '6mm',
-          paddingBottom: '4mm',
-          minHeight: 'calc(297mm - 31mm - 32mm)',
-          fontSize: '9.5pt',
-          lineHeight: '1.52',
-          color: '#1a1a1a',
-        }}>
-
-          {/* Title */}
-          <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11pt', marginBottom: '10mm' }}>
-            APPOINTMENT LETTER
-          </div>
-
-          {/* Date + To */}
-          <p style={{ marginBottom: '4mm' }}><strong>Date:</strong> {ph(f.dateOfIssue, 'DD Month YYYY')}</p>
-          <p style={{ marginBottom: '0', fontWeight: 'bold' }}>To,</p>
-          <p style={{ marginBottom: '0' }}>{ph(f.employeeFullName, 'Employee Full Name')}</p>
-          <p style={{ marginBottom: '4mm' }}>Subject: Appointment as {ph(f.designation, 'Designation')}</p>
-          <p style={{ marginBottom: '4mm' }}>Dear {ph(f.employeeFirstName || f.employeeFullName, 'First Name')},</p>
-
-          {/* Intro paragraph */}
-          <p style={{ textAlign: 'justify', marginBottom: '4mm' }}>
-            We are pleased to confirm your appointment with {co} (the "Company") as a{' '}
-            {ph(f.designation, 'Designation')}. This Appointment Letter records the terms and
-            conditions of your employment
-            {f.offerLetterDate
-              ? ` and supersedes the joining-date reference contained in the Offer Letter dated ${f.offerLetterDate} to the extent that the Offer Letter stated a joining date of ${f.offerLetterJoiningDate || f.joiningDate}.`
-              : '.'
-            }{' '}
-            Your actual date of joining and commencement of employment is{' '}
-            {ph(f.joiningDate, 'Joining Date')}.
-          </p>
-
-          {/* Sections */}
-          <Section n="1" title="Appointment and Designation">
-            You are appointed as {ph(f.designation, 'Designation')} with effect from{' '}
-            {ph(f.joiningDate, 'Joining Date')}. You will report to the{' '}
-            {ph(f.reportingManager, 'Reporting Manager')} designated by the Company from time to time.
-            The Company may reasonably modify your reporting structure, responsibilities, projects, or
-            allocation of work based on business requirements without changing your substantive
-            designation or agreed compensation unless otherwise communicated in writing.
-          </Section>
-
-          <Section n="2" title="Date of Joining">
-            Your date of joining is {ph(f.joiningDate, 'Joining Date')}. For employment, payroll,
-            internal records and service purposes, {ph(f.joiningDate, 'Joining Date')} shall be treated
-            as your commencement date with the Company.
-          </Section>
-
-          <Section n="3" title="Compensation">
-            {comp ? (
-              <>
-                Your monthly compensation is <strong>₹{comp}/- (Rupees {cwords} Only)</strong>,
-                inclusive of applicable Provident Fund (PF) and insurance contributions/benefits,
-                wherever applicable under the Company's policies and statutory requirements. Any
-                applicable statutory deductions or employer contributions will be dealt with in
-                accordance with applicable law and the Company's payroll practices.
-              </>
-            ) : (
-              <>Your monthly compensation will be as communicated in writing.</>
-            )}
-          </Section>
-
-          <Section n="4" title="Performance-Based Incentive">
-            In addition to the above compensation, you are eligible for a performance-based incentive
-            of up to <strong>{f.incentivePercent || '15'}%</strong> of eligible revenue generated from
-            technical products/services sold to clients and attributable to your efforts. The incentive
-            is not guaranteed compensation and is subject to: (a) the revenue being attributable to
-            your contribution; (b) successful receipt of the relevant client payment by the Company;
-            (c) verification and approval of the revenue and incentive calculation by the Company; and
-            (d) the applicable incentive policy and payment cycle. The Company reserves the right to
-            determine eligibility and calculation methodology in accordance with its applicable policy.
-          </Section>
-
-          <Section n="5" title="Key Duties and Responsibilities">
-            <p style={{ marginBottom: '2mm' }}>Your responsibilities will include, but will not be limited to:</p>
-            {duties.map((d, i) => (
-              <p key={i} style={{ paddingLeft: '5mm', marginBottom: '1.5mm', textIndent: '-5mm', textAlign: 'justify' }}>
-                •&nbsp; {d}
-              </p>
-            ))}
-          </Section>
-
-          <Section n="6" title="Working Hours, Location and Work Requirements">
-            You shall follow the working hours, attendance requirements, work location, remote/hybrid
-            arrangements, meeting schedules and other operational requirements communicated by the
-            Company from time to time. You are expected to remain reasonably available during agreed
-            working hours and to attend client or internal meetings and project discussions as required
-            for effective performance of your role.
-          </Section>
-
-          <Section n="7" title="Professional Conduct">
-            You shall maintain professional conduct, discipline, integrity, honesty and respectful
-            behaviour in all dealings with the Company, its directors, employees, clients, vendors and
-            other stakeholders. You shall comply with reasonable instructions, policies, procedures,
-            security requirements and professional standards of the Company.
-          </Section>
-
-          <Section n="8" title="Confidentiality and Non-Disclosure">
-            During your employment, you may have access to confidential information relating to the
-            Company, its clients, products, technology, source code, credentials, software architecture,
-            business plans, pricing, proposals, contracts, documentation, customer information,
-            financial information, marketing plans and other proprietary information. You shall keep
-            such information strictly confidential and shall not disclose, copy, transfer, misuse or
-            share it with any unauthorised person during or after employment.
-          </Section>
-
-          <Section n="9" title="Intellectual Property and Work Product">
-            All software, source code, scripts, documentation, designs, databases, technical solutions,
-            processes, concepts, inventions, improvements, materials, configurations and other work
-            product created, developed or substantially contributed to by you in the course of your
-            employment or using Company resources shall belong to the Company, subject to applicable
-            law and any separate written agreement.
-          </Section>
-
-          <Section n="10" title="Company Systems, Data and Security">
-            You shall use Company systems, accounts, repositories, devices, credentials, APIs, cloud
-            services and other resources only for authorised business purposes. You must maintain
-            appropriate password and access security and immediately report any suspected unauthorised
-            access, data loss, security incident or compromise of credentials.
-          </Section>
-
-          <Section n="11" title="Client and Vendor Communication">
-            Where you interact with clients or vendors on behalf of the Company, you shall communicate
-            professionally and within the authority granted to you. You shall not make commitments,
-            pricing assurances or other commercial commitments on behalf of the Company unless
-            authorised to do so.
-          </Section>
-
-          <Section n="12" title="Conflict of Interest">
-            You shall promptly disclose any actual or potential conflict of interest that may affect
-            your responsibilities or the interests of the Company.
-          </Section>
-
-          <Section n="13" title="Outside Work and Competing Activities">
-            During your employment, you shall not undertake outside work, consulting, freelancing or
-            other professional activity that materially conflicts with your duties or creates a conflict
-            of interest.
-          </Section>
-
-          <Section n="14" title="Company Property and Return of Assets">
-            All Company property shall remain Company property. Upon request or cessation of employment,
-            you shall promptly return or hand over all Company property and information.
-          </Section>
-
-          <Section n="15" title="Leave, Attendance and Company Policies">
-            Leave, attendance, holidays, payroll procedures and other employment administration matters
-            shall be governed by applicable law and the Company's policies as communicated from time
-            to time.
-          </Section>
-
-          <Section n="16" title="Statutory Deductions and Benefits">
-            Any statutory deductions, contributions or benefits applicable to your employment shall be
-            administered in accordance with applicable law and the Company's payroll policies.
-            {comp && ` The stated monthly compensation of ₹${comp}/- is inclusive of applicable PF and insurance components.`}
-          </Section>
-
-          <Section n="17" title="Verification and Documentation">
-            Your appointment is subject to submission and verification of documents and information
-            reasonably required by the Company for employment, payroll, statutory and compliance
-            purposes.
-          </Section>
-
-          <Section n="18" title="Performance and Role Review">
-            Your performance may be reviewed periodically based on responsibilities, project delivery,
-            quality, timelines, client satisfaction, technical contribution, teamwork and other
-            reasonable performance parameters applicable to your role.
-          </Section>
-
-          <Section n="19" title="Termination and Separation">
-            Your employment may be terminated or may otherwise come to an end in accordance with
-            applicable law and the Company's employment policies. On separation, you shall complete
-            all reasonable handover requirements and comply with continuing confidentiality and
-            intellectual-property obligations.
-          </Section>
-
-          <Section n="20" title="Continuing Obligations">
-            Clauses concerning confidentiality, intellectual property, return of Company property and
-            data/security obligations shall survive cessation of employment to the extent permitted by
-            applicable law.
-          </Section>
-
-          <Section n="21" title="Amendments and Company Policies">
-            The Company may introduce or amend reasonable policies, procedures and operational
-            guidelines from time to time.
-          </Section>
-
-          <Section n="22" title="Governing Law and Jurisdiction">
-            This Appointment Letter shall be governed by the laws applicable in India. Subject to
-            applicable law, matters arising from this employment shall be subject to the jurisdiction
-            of the competent courts/authorities in Bengaluru, Karnataka.
-          </Section>
-
-          <Section n="23" title="Acceptance">
-            By signing below, you acknowledge that you have read, understood and accepted the terms
-            of this Appointment Letter and confirm your joining with the Company with effect from{' '}
-            {ph(f.joiningDate, 'Joining Date')}.
-          </Section>
-
-          {/* Signature block */}
-          <div style={{ marginTop: '8mm' }}>
-            <p style={{ fontWeight: 'bold' }}>For {co.toUpperCase()}</p>
-            <p style={{ marginTop: '2mm' }}>Authorized Signatory</p>
-            <p>Name: {ph(f.authorizedSignatoryName, 'Signatory Name')}</p>
-            <p>Designation: {ph(f.authorizedSignatoryDesignation, 'Signatory Designation')}</p>
-            <p style={{ marginTop: '8mm' }}>Signature: ______________________________</p>
-            <p>Date: {ph(f.dateOfIssue, 'Date')}</p>
-          </div>
-
-          {/* Employee acceptance */}
-          <div style={{ marginTop: '8mm', borderTop: '1px solid #ccc', paddingTop: '4mm' }}>
-            <p style={{ fontWeight: 'bold' }}>EMPLOYEE ACKNOWLEDGEMENT AND ACCEPTANCE</p>
-            <p style={{ marginTop: '2mm', textAlign: 'justify' }}>
-              I, {ph(f.employeeFullName, 'Employee Name')}, acknowledge that I have received, read and
-              understood this Appointment Letter and accept the terms and conditions of my employment
-              with {co}.
-            </p>
-            <p style={{ marginTop: '4mm' }}>Employee Name: {ph(f.employeeFullName, 'Name')}</p>
-            <p>Signature: ______________________________</p>
-            <p>Date: {ph(f.dateOfIssue, 'Date')}</p>
-          </div>
-        </div>
-
-        {/* ── FOOTER ── */}
-        <div style={{ width: '100%', height: '32mm', position: 'relative' }}>
-          <img
-            src={LETTERHEAD_FOOTER}
-            alt="letterhead footer"
-            style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
+const ph = (v, label) => v
+  ? <span>{v}</span>
+  : <span className="text-red-400 italic text-[10px]">{'<<'}{label}{'>>'}</span>;
 
 function Section({ n, title, children }) {
   return (
     <div style={{ marginBottom: '3mm' }}>
-      <p style={{ fontWeight: 'bold', marginBottom: '1mm' }}>{n}. {title}</p>
-      <p style={{ textAlign: 'justify' }}>{children}</p>
+      <p style={{ fontWeight: 'bold', marginBottom: '1mm', ...bodyStyle }}>{n}. {title}</p>
+      <p style={{ textAlign: 'justify', ...bodyStyle }}>{children}</p>
+    </div>
+  );
+}
+
+// SectionNB — same as Section but marked to force a page break before it
+// if it won't fit on the current page (mirrors sec_nb / KeepTogether in PDF).
+function SectionNB({ n, title, children }) {
+  return (
+    <div data-page-break-before="true" style={{ marginBottom: '3mm' }}>
+      <p style={{ fontWeight: 'bold', marginBottom: '1mm', ...bodyStyle }}>{n}. {title}</p>
+      <p style={{ textAlign: 'justify', ...bodyStyle }}>{children}</p>
+    </div>
+  );
+}
+
+// Builds the body as a flat list of atomic, independently-measurable blocks —
+// mirrors the PDF's flowable story so pagination logic can pack them the
+// same way ReportLab packs Paragraph/KeepTogether flowables into frames.
+function buildBlocks(f) {
+  // Preserve the user's exact order/wording; only drop blank/whitespace-only
+  // rows (e.g. an unfinished "+ Add Duty" entry) so they don't render as
+  // empty, misaligned bullets — mirrors get_duties_for_role() server-side.
+  const rawDuties = f.duties?.length > 0 ? f.duties : getDutiesForDesignation(f.designation);
+  const duties = rawDuties.map(d => (d || '').trim()).filter(Boolean);
+  const comp = f.compensation;
+  const cwords = f.compensationWords;
+  const co = f.registeredCompanyName || 'DutyLaunch Solutions Private Limited';
+  const blocks = [];
+  let k = 0;
+  const push = (node) => blocks.push({ id: `b${k++}`, node });
+  // Sections always number 1..N with no gaps, whether or not the optional
+  // incentive section is included — mirrors next_n() server-side.
+  let secN = 0;
+  const nextN = () => ++secN;
+
+  push(<div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11pt', marginTop: '5.6mm', marginBottom: '10mm', ...bodyStyle }}>APPOINTMENT LETTER</div>);
+
+  push(
+    <div style={bodyStyle}>
+      <p style={{ marginBottom: '4mm' }}><strong>Date:</strong> {ph(f.dateOfIssue, 'DD Month YYYY')}</p>
+      <p style={{ marginBottom: '0', fontWeight: 'bold' }}>To,</p>
+      <p style={{ marginBottom: '0' }}>{ph(f.employeeFullName, 'Employee Full Name')}</p>
+      <p style={{ marginBottom: '4mm' }}>Subject: Appointment as {ph(f.designation, 'Designation')}</p>
+      <p style={{ marginBottom: '4mm' }}>Dear {ph(f.employeeFirstName || f.employeeFullName, 'First Name')},</p>
+    </div>
+  );
+
+  push(
+    <p style={{ textAlign: 'justify', marginBottom: '4mm', ...bodyStyle }}>
+      We are pleased to confirm your appointment with {co} (the "Company") as a{' '}
+      {ph(f.designation, 'Designation')}. This Appointment Letter records the terms and
+      conditions of your employment
+      {f.offerLetterDate
+        ? ` and supersedes the joining-date reference contained in the Offer Letter dated ${f.offerLetterDate} to the extent that the Offer Letter stated a joining date of ${f.offerLetterJoiningDate || f.joiningDate}.`
+        : '.'
+      }{' '}
+      Your actual date of joining and commencement of employment is{' '}
+      {ph(f.joiningDate, 'Joining Date')}.
+    </p>
+  );
+
+  push(
+    <Section n={nextN()} title="Appointment and Designation">
+      You are appointed as {ph(f.designation, 'Designation')} with effect from{' '}
+      {ph(f.joiningDate, 'Joining Date')}. You will report to the{' '}
+      {ph(f.reportingManager, 'Reporting Manager')} designated by the Company from time to time.
+      The Company may reasonably modify your reporting structure, responsibilities, projects, or
+      allocation of work based on business requirements without changing your substantive
+      designation or agreed compensation unless otherwise communicated in writing.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Date of Joining">
+      Your date of joining is {ph(f.joiningDate, 'Joining Date')}. For employment, payroll,
+      internal records and service purposes, {ph(f.joiningDate, 'Joining Date')} shall be treated
+      as your commencement date with the Company.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Compensation">
+      {comp ? (
+        <>
+          Your monthly compensation is <strong>₹{comp}/- (Rupees {cwords} Only)</strong>,
+          inclusive of applicable Provident Fund (PF) and insurance contributions/benefits,
+          wherever applicable under the Company's policies and statutory requirements. Any
+          applicable statutory deductions or employer contributions will be dealt with in
+          accordance with applicable law and the Company's payroll practices.
+        </>
+      ) : (
+        <>Your monthly compensation will be as communicated in writing.</>
+      )}
+    </Section>
+  );
+
+  if (f.includeIncentive) {
+    push(
+      <Section n={nextN()} title="Performance-Based Incentive">
+        In addition to the above compensation, you are eligible for a performance-based incentive
+        of up to <strong>{f.incentivePercent || '15'}%</strong> of eligible revenue generated from
+        technical products/services sold to clients and attributable to your efforts. The incentive
+        is not guaranteed compensation and is subject to: (a) the revenue being attributable to
+        your contribution; (b) successful receipt of the relevant client payment by the Company;
+        (c) verification and approval of the revenue and incentive calculation by the Company; and
+        (d) the applicable incentive policy and payment cycle. The Company reserves the right to
+        determine eligibility and calculation methodology in accordance with its applicable policy.
+      </Section>
+    );
+  }
+
+  // Heading + intro line + first bullet are one atomic block (mirrors the
+  // PDF's KeepTogether) so the heading can never be stranded at the bottom
+  // of a page with its first bullet cut off / pushed into the footer gap.
+  push(
+    <div data-page-break-before="true" style={{ marginTop: '5mm', marginBottom: '3mm', ...bodyStyle }}>
+      <p style={{ fontWeight: 'bold', marginBottom: '1mm' }}>{nextN()}. Key Duties and Responsibilities</p>
+      <p style={{ marginBottom: '2mm' }}>Your responsibilities will include, but will not be limited to:</p>
+      {duties.length > 0 && (
+        <p style={{ paddingLeft: '5mm', marginBottom: '1.5mm', textIndent: '-5mm', textAlign: 'justify' }}>
+          •&nbsp; {duties[0]}
+        </p>
+      )}
+    </div>
+  );
+  duties.slice(1).forEach((d) => {
+    push(
+      <p style={{ paddingLeft: '5mm', marginBottom: '1.5mm', textIndent: '-5mm', textAlign: 'justify', ...bodyStyle }}>
+        •&nbsp; {d}
+      </p>
+    );
+  });
+
+  push(
+    <Section n={nextN()} title="Working Hours, Location and Work Requirements">
+      You shall follow the working hours, attendance requirements, work location, remote/hybrid
+      arrangements, meeting schedules and other operational requirements communicated by the
+      Company from time to time. You are expected to remain reasonably available during agreed
+      working hours and to attend client or internal meetings and project discussions as required
+      for effective performance of your role.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Professional Conduct">
+      You shall maintain professional conduct, discipline, integrity, honesty and respectful
+      behaviour in all dealings with the Company, its directors, employees, clients, vendors and
+      other stakeholders. You shall comply with reasonable instructions, policies, procedures,
+      security requirements and professional standards of the Company.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Confidentiality and Non-Disclosure">
+      During your employment, you may have access to confidential information relating to the
+      Company, its clients, products, technology, source code, credentials, software architecture,
+      business plans, pricing, proposals, contracts, documentation, customer information,
+      financial information, marketing plans and other proprietary information. You shall keep
+      such information strictly confidential and shall not disclose, copy, transfer, misuse or
+      share it with any unauthorised person during or after employment.
+    </Section>
+  );
+
+  push(
+    <SectionNB n={nextN()} title="Intellectual Property and Work Product">
+      All software, source code, scripts, documentation, designs, databases, technical solutions,
+      processes, concepts, inventions, improvements, materials, configurations and other work
+      product created, developed or substantially contributed to by you in the course of your
+      employment or using Company resources shall belong to the Company, subject to applicable
+      law and any separate written agreement.
+    </SectionNB>
+  );
+
+  push(
+    <Section n={nextN()} title="Company Systems, Data and Security">
+      You shall use Company systems, accounts, repositories, devices, credentials, APIs, cloud
+      services and other resources only for authorised business purposes. You must maintain
+      appropriate password and access security and immediately report any suspected unauthorised
+      access, data loss, security incident or compromise of credentials.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Client and Vendor Communication">
+      Where you interact with clients or vendors on behalf of the Company, you shall communicate
+      professionally and within the authority granted to you. You shall not make commitments,
+      pricing assurances or other commercial commitments on behalf of the Company unless
+      authorised to do so.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Conflict of Interest">
+      You shall promptly disclose any actual or potential conflict of interest that may affect
+      your responsibilities or the interests of the Company.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Outside Work and Competing Activities">
+      During your employment, you shall not undertake outside work, consulting, freelancing or
+      other professional activity that materially conflicts with your duties or creates a conflict
+      of interest.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Company Property and Return of Assets">
+      All Company property shall remain Company property. Upon request or cessation of employment,
+      you shall promptly return or hand over all Company property and information.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Leave, Attendance and Company Policies">
+      Leave, attendance, holidays, payroll procedures and other employment administration matters
+      shall be governed by applicable law and the Company's policies as communicated from time
+      to time.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Statutory Deductions and Benefits">
+      Any statutory deductions, contributions or benefits applicable to your employment shall be
+      administered in accordance with applicable law and the Company's payroll policies.
+      {comp && ` The stated monthly compensation of ₹${comp}/- is inclusive of applicable PF and insurance components.`}
+    </Section>
+  );
+
+  push(
+    <SectionNB n={nextN()} title="Verification and Documentation">
+      Your appointment is subject to submission and verification of documents and information
+      reasonably required by the Company for employment, payroll, statutory and compliance
+      purposes.
+    </SectionNB>
+  );
+
+  push(
+    <Section n={nextN()} title="Performance and Role Review">
+      Your performance may be reviewed periodically based on responsibilities, project delivery,
+      quality, timelines, client satisfaction, technical contribution, teamwork and other
+      reasonable performance parameters applicable to your role.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Termination and Separation">
+      Your employment may be terminated or may otherwise come to an end in accordance with
+      applicable law and the Company's employment policies. On separation, you shall complete
+      all reasonable handover requirements and comply with continuing confidentiality and
+      intellectual-property obligations.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Continuing Obligations">
+      Clauses concerning confidentiality, intellectual property, return of Company property and
+      data/security obligations shall survive cessation of employment to the extent permitted by
+      applicable law.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Amendments and Company Policies">
+      The Company may introduce or amend reasonable policies, procedures and operational
+      guidelines from time to time.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Governing Law and Jurisdiction">
+      This Appointment Letter shall be governed by the laws applicable in India. Subject to
+      applicable law, matters arising from this employment shall be subject to the jurisdiction
+      of the competent courts/authorities in Bengaluru, Karnataka.
+    </Section>
+  );
+
+  push(
+    <Section n={nextN()} title="Acceptance">
+      By signing below, you acknowledge that you have read, understood and accepted the terms
+      of this Appointment Letter and confirm your joining with the Company with effect from{' '}
+      {ph(f.joiningDate, 'Joining Date')}.
+    </Section>
+  );
+
+  // Signature blocks — each kept as one atomic unit (mirrors the PDF's
+  // per-party KeepTogether groups) so labels/underscores never split away
+  // from the value above them, even when the value is very long.
+  push(
+    <div data-page-break-before="always" style={{ marginTop: '8mm', ...bodyStyle }}>
+      <p style={{ fontWeight: 'bold' }}>For {co.toUpperCase()}</p>
+      <p style={{ marginTop: '2mm' }}>Authorized Signatory</p>
+      <p>Name: {ph(f.authorizedSignatoryName, 'Signatory Name')}</p>
+      <p>Designation: {ph(f.authorizedSignatoryDesignation, 'Signatory Designation')}</p>
+      <p style={{ marginTop: '8mm' }}>Signature: ______________________________</p>
+      <p>Date: {ph(f.dateOfIssue, 'Date')}</p>
+    </div>
+  );
+
+  push(
+    <div style={{ marginTop: '8mm', borderTop: '1px solid #ccc', paddingTop: '4mm', ...bodyStyle }}>
+      <p style={{ fontWeight: 'bold' }}>EMPLOYEE ACKNOWLEDGEMENT AND ACCEPTANCE</p>
+      <p style={{ marginTop: '2mm', textAlign: 'justify' }}>
+        I, {ph(f.employeeFullName, 'Employee Name')}, acknowledge that I have received, read and
+        understood this Appointment Letter and accept the terms and conditions of my employment
+        with {co}.
+      </p>
+      <p style={{ marginTop: '4mm' }}>Employee Name: {ph(f.employeeFullName, 'Name')}</p>
+      <p>Signature: ______________________________</p>
+      <p>Date: {ph(f.dateOfIssue, 'Date')}</p>
+    </div>
+  );
+
+  return blocks;
+}
+
+function LetterheadHeader() {
+  return (
+    <div style={{ width: '100%', height: `${HDR_H_MM}mm`, flexShrink: 0, overflow: 'hidden' }}>
+      <img
+        src={LETTERHEAD_HEADER}
+        alt="letterhead header"
+        style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
+      />
+    </div>
+  );
+}
+
+function LetterheadFooter() {
+  return (
+    <div style={{ width: '100%', height: `${FTR_H_MM}mm`, flexShrink: 0, overflow: 'hidden' }}>
+      <img
+        src={LETTERHEAD_FOOTER}
+        alt="letterhead footer"
+        style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
+      />
+    </div>
+  );
+}
+
+function A4Page({ children }) {
+  return (
+    <div
+      className="bg-white shadow-xl flex-shrink-0"
+      style={{
+        width: `${A4_WIDTH_MM}mm`,
+        height: `${A4_HEIGHT_MM}mm`,
+        position: 'relative',
+        fontFamily: 'Arial, Helvetica, sans-serif',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <LetterheadHeader />
+      <div style={{
+        margin: `0 ${MARGIN_MM}mm`,
+        paddingTop: `${SAFETY_GAP_MM}mm`,
+        paddingBottom: `${SAFETY_GAP_MM}mm`,
+        height: `${BODY_USABLE_H_MM}mm`,
+        overflow: 'visible',
+      }}>
+        {children}
+      </div>
+      <LetterheadFooter />
+    </div>
+  );
+}
+
+// Extracts the text of each visually-rendered line inside `el` using the
+// Range API (the standard technique behind JS pagination polyfills like
+// Paged.js) — lets us split a paragraph exactly where the browser itself
+// would wrap it, instead of guessing word-by-word.
+function splitElementIntoLines(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const rects = Array.from(range.getClientRects()).filter(r => r.width > 0.5 && r.height > 0.5);
+  if (rects.length <= 1) return null;
+  const parts = [];
+  for (const rect of rects) {
+    const y = rect.top + rect.height / 2;
+    if (!document.caretRangeFromPoint) return null;
+    const startCaret = document.caretRangeFromPoint(rect.left + 0.5, y);
+    const endCaret = document.caretRangeFromPoint(rect.right - 0.5, y);
+    if (!startCaret || !endCaret) return null;
+    const r = document.createRange();
+    try {
+      r.setStart(startCaret.startContainer, startCaret.startOffset);
+      r.setEnd(endCaret.startContainer, endCaret.startOffset);
+    } catch {
+      return null;
+    }
+    parts.push(r.toString());
+  }
+  return parts;
+}
+
+// Trims a <p> element (already laid out inside the tester) down to however
+// many of its lines fit above `limitBottom`, mutating it in place. Returns
+// the remainder text (for the next page) or null if nothing needed cutting,
+// or if the paragraph can't be usefully split (e.g. it's a single line).
+function trimParagraphToFit(pEl, limitBottom) {
+  if (pEl.getBoundingClientRect().bottom <= limitBottom + 0.5) return null;
+  const lines = splitElementIntoLines(pEl);
+  if (!lines || lines.length < 2) return null;
+  const original = pEl.textContent;
+  for (let n = lines.length - 1; n >= 1; n--) {
+    pEl.textContent = lines.slice(0, n).join(' ');
+    if (pEl.getBoundingClientRect().bottom <= limitBottom + 0.5) {
+      return lines.slice(n).join(' ');
+    }
+  }
+  pEl.textContent = original;
+  return null; // not even one line fits — caller falls back to moving the whole thing
+}
+
+// Attempts to split an overflowing clone into a "fits on this page" part
+// (mutated in place) and a "remainder" DOM node to retry on the next page —
+// mirrors how ReportLab's Frame splits flowables (Paragraph by line,
+// KeepTogether groups by sub-flowable) instead of forcing whole blocks to
+// jump pages over a single overflowing line. Returns the remainder node, or
+// null if the clone couldn't be split (caller should move it wholesale).
+function trySplitClone(clone, limitBottom) {
+  if (clone.tagName === 'P') {
+    const remainderText = trimParagraphToFit(clone, limitBottom);
+    if (remainderText == null) return null;
+    const rem = document.createElement('p');
+    rem.setAttribute('style', clone.getAttribute('style') || '');
+    rem.textContent = remainderText;
+    return rem;
+  }
+
+  const children = Array.from(clone.children);
+  if (children.length < 2) return null;
+
+  let fitCount = 0;
+  for (const child of children) {
+    if (child.getBoundingClientRect().bottom <= limitBottom + 0.5) fitCount++;
+    else break;
+  }
+  // Even when NOTHING fully fits (fitCount === 0) — e.g. the very first
+  // child (often a heading) misses the boundary by a hair — still attempt
+  // to split that first overflowing child by line before giving up. Only a
+  // genuine "not even one line fits" case falls through to moving the whole
+  // block, which is handled below by the caller re-checking overflow.
+  const overflowChild = children[fitCount];
+  const laterSiblings = children.slice(fitCount + 1);
+  const rem = document.createElement('div');
+  rem.setAttribute('style', clone.getAttribute('style') || '');
+
+  if (overflowChild && overflowChild.tagName === 'P') {
+    const remainderText = trimParagraphToFit(overflowChild, limitBottom);
+    if (remainderText != null) {
+      const remP = document.createElement('p');
+      remP.setAttribute('style', overflowChild.getAttribute('style') || '');
+      remP.textContent = remainderText;
+      rem.appendChild(remP);
+      laterSiblings.forEach(s => rem.appendChild(s));
+      return rem;
+    }
+  }
+  if (fitCount === 0) return null; // nothing at all fits — move the whole block wholesale
+  // Couldn't split the first overflowing child itself — defer it whole,
+  // along with everything after it, to the next page.
+  if (overflowChild) rem.appendChild(overflowChild);
+  laterSiblings.forEach(s => rem.appendChild(s));
+  return rem;
+}
+
+// ── A4 Live Preview ──────────────────────────────────────────────────────────
+// Renders true, multi-page A4 previews: content is measured off-screen and
+// packed into page-sized chunks the same way the PDF generator's ReportLab
+// frames flow flowables — keeping the two renderers visually consistent.
+function A4Preview({ f }) {
+  const blocks = buildBlocks(f);
+  const measureRefs = useRef({});
+  const [pages, setPages] = useState(null);
+  const pageBodyRefs = useRef([]);
+  const pagesDomRef = useRef([[]]);
+
+  useLayoutEffect(() => {
+    // Pack by directly testing overflow against a bounded container sized
+    // exactly like the real page body (same width/height/box model), then
+    // — if something overflows — try to split it at a paragraph-line or
+    // child-element boundary (mirroring ReportLab's Frame/Paragraph split)
+    // instead of forcing the whole block to the next page. That keeps pages
+    // as full as the PDF's real pagination would, instead of leaving large
+    // blank gaps whenever one heading+body section doesn't fully fit.
+    const PACKING_SAFETY_MM = 3; // small residual buffer for font-metric rounding
+    const testerHeightMm = Math.max(BODY_USABLE_H_MM - PACKING_SAFETY_MM, 10);
+
+    const tester = document.createElement('div');
+    Object.assign(tester.style, {
+      position: 'fixed', top: '0', left: '-99999px',
+      visibility: 'hidden', pointerEvents: 'none',
+      width: `${A4_WIDTH_MM - 2 * MARGIN_MM}mm`,
+      height: `${testerHeightMm}mm`,
+      overflow: 'hidden',
+      fontFamily: 'Arial, Helvetica, sans-serif',
+    });
+    document.body.appendChild(tester);
+
+    // Queue of DOM nodes still to be placed — starts as clones of the
+    // original (measured) blocks, but split() can push remainder nodes back
+    // onto the front to keep flowing across further pages.
+    const queue = blocks.map(b => {
+      const source = measureRefs.current[b.id];
+      // `source` is the offscreen wrapper <div key=...> we render each block
+      // into (needed so we have a ref) — clone its actual content, not the
+      // wrapper itself, or every clone looks like a single-child node to the
+      // splitter below.
+      const content = source && source.firstElementChild;
+      return content ? content.cloneNode(true) : null;
+    }).filter(Boolean);
+
+    const built = [];
+    let current = [];
+    let guard = 0;
+    while (queue.length && guard++ < 5000) {
+      const clone = queue.shift();
+      const pbv = clone.dataset && clone.dataset.pageBreakBefore;
+      if (pbv && current.length > 0) {
+        if (pbv === 'always') {
+          // Hard page break — always start a new page (mirrors PageBreak() in PDF)
+          built.push(current);
+          current = [];
+          tester.innerHTML = '';
+        } else if (pbv === 'true') {
+          // Threshold break — only if less than 40mm remains (mirrors CondPageBreak/KeepTogether)
+          tester.appendChild(clone);
+          const spaceUsed = tester.scrollHeight;
+          const thresholdPx = 40 * (96 / 25.4);
+          if (spaceUsed > tester.clientHeight - thresholdPx) {
+            tester.removeChild(clone);
+            built.push(current);
+            current = [];
+            tester.innerHTML = '';
+          } else {
+            tester.removeChild(clone);
+          }
+        }
+      }
+      tester.appendChild(clone);
+      const overflowed = tester.scrollHeight > tester.clientHeight + 1;
+      if (overflowed && current.length > 0) {
+        const limitBottom = tester.getBoundingClientRect().top + tester.clientHeight;
+        const remainder = trySplitClone(clone, limitBottom);
+        if (remainder && remainder.childNodes.length > 0) {
+          // Part of `clone` stays (already trimmed in place); queue the rest.
+          queue.unshift(remainder);
+        } else if (remainder === null && clone.getBoundingClientRect().bottom > limitBottom + 0.5) {
+          // Couldn't split at all — the whole thing moves to the next page.
+          tester.removeChild(clone);
+          built.push(current);
+          current = [];
+          tester.innerHTML = '';
+          tester.appendChild(clone);
+        }
+      }
+      current.push(clone);
+    }
+    if (current.length > 0) built.push(current);
+    document.body.removeChild(tester);
+    setPages(built.length > 0 ? built.map((_, i) => i) : [0]);
+    // Stash the actual DOM node lists for the imperative-append effect below.
+    pagesDomRef.current = built.length > 0 ? built : [[]];
+  }, [JSON.stringify(f)]);
+
+  useLayoutEffect(() => {
+    // Populate each page's body with its packed DOM nodes imperatively —
+    // the packer above works with cloned/split real DOM nodes (necessary to
+    // use the Range API for line-accurate splitting), so we place them
+    // directly rather than trying to serialize them back into JSX.
+    const built = pagesDomRef.current;
+    pageBodyRefs.current.forEach((el, i) => {
+      if (!el) return;
+      el.innerHTML = '';
+      (built[i] || []).forEach(node => el.appendChild(node));
+    });
+  }, [pages]);
+
+  return (
+    <div className="flex flex-col items-center overflow-y-auto h-full bg-gray-300 py-4 px-2 gap-4">
+      {/* Off-screen measurement pass — same width/typography as the real page body */}
+      <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', top: 0, left: 0, width: `${A4_WIDTH_MM - 2 * MARGIN_MM}mm` }}>
+        {blocks.map(b => (
+          <div key={b.id} ref={el => { measureRefs.current[b.id] = el; }}>
+            {b.node}
+          </div>
+        ))}
+      </div>
+
+      {(pages || []).map((pi) => (
+        <A4Page key={pi}>
+          <div ref={el => { pageBodyRefs.current[pi] = el; }} />
+        </A4Page>
+      ))}
     </div>
   );
 }
@@ -372,7 +737,7 @@ const EMPTY = {
   dateOfIssue: '', offerLetterDate: '', offerLetterJoiningDate: '',
   employeeCode: '', employeeFullName: '', employeeFirstName: '',
   designation: '', joiningDate: '', workLocation: '', reportingManager: 'management/person',
-  compensation: '', compensationWords: '', incentivePercent: '15',
+  compensation: '', compensationWords: '', incentivePercent: '15', includeIncentive: true,
   registeredCompanyName: 'DutyLaunch Solutions Private Limited',
   authorizedSignatoryName: 'Moqsood Ahmed',
   authorizedSignatoryDesignation: 'Founder and CEO',
@@ -434,6 +799,13 @@ function LetterEditor({ letter, onSaved, onClose }) {
   const addDuty = () => setForm(f => ({ ...f, duties: [...f.duties, ''] }));
   const removeDuty = i => setForm(f => ({ ...f, duties: f.duties.filter((_, j) => j !== i) }));
   const resetDuties = () => setForm(f => ({ ...f, duties: getDutiesForDesignation(f.designation) }));
+  const moveDuty = (i, dir) => setForm(f => {
+    const j = i + dir;
+    if (j < 0 || j >= f.duties.length) return f;
+    const d = [...f.duties];
+    [d[i], d[j]] = [d[j], d[i]];
+    return { ...f, duties: d };
+  });
 
   const validate = () => {
     const e = {};
@@ -618,16 +990,14 @@ function LetterEditor({ letter, onSaved, onClose }) {
           {/* Role & Designation */}
           <FS title="Role & Designation">
             <FI label="Designation *" error={errors.designation}>
-              <input
+              <select
                 className={ic(errors.designation)}
                 value={form.designation}
                 onChange={e => loadRoleDuties(e.target.value)}
-                placeholder="Full Stack Engineer"
-                list="designation-suggestions"
-              />
-              <datalist id="designation-suggestions">
-                {Object.keys(ROLE_DUTIES).map(r => <option key={r} value={r} />)}
-              </datalist>
+              >
+                <option value="" disabled>Select a role…</option>
+                {DESIGNATIONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
             </FI>
             <p className="text-xs text-gray-400">Duties below auto-load based on designation. You can edit them.</p>
           </FS>
@@ -642,9 +1012,20 @@ function LetterEditor({ letter, onSaved, onClose }) {
                 <input className={ic()} value={form.compensationWords} onChange={set('compensationWords')} placeholder="Thirty Thousand" />
               </FI>
             </div>
-            <FI label="Performance Incentive %">
-              <input className={ic()} type="number" value={form.incentivePercent} onChange={set('incentivePercent')} placeholder="15" min="0" max="100" />
-            </FI>
+            <label className="flex items-center gap-2 text-sm mt-2">
+              <input
+                type="checkbox"
+                checked={form.includeIncentive}
+                onChange={e => setForm(f => ({ ...f, includeIncentive: e.target.checked }))}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-400"
+              />
+              Include Performance-Based Incentive section
+            </label>
+            {form.includeIncentive && (
+              <FI label="Performance Incentive %">
+                <input className={ic()} type="number" value={form.incentivePercent} onChange={set('incentivePercent')} placeholder="15" min="0" max="100" />
+              </FI>
+            )}
           </FS>
 
           {/* Duties */}
@@ -658,6 +1039,24 @@ function LetterEditor({ letter, onSaved, onClose }) {
             <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
               {form.duties.map((d, i) => (
                 <div key={i} className="flex gap-1.5">
+                  <div className="flex flex-col flex-shrink-0 mt-1">
+                    <button
+                      onClick={() => moveDuty(i, -1)}
+                      disabled={i === 0}
+                      className="text-gray-400 hover:text-primary-600 disabled:opacity-25 disabled:hover:text-gray-400"
+                      title="Move up"
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => moveDuty(i, 1)}
+                      disabled={i === form.duties.length - 1}
+                      className="text-gray-400 hover:text-primary-600 disabled:opacity-25 disabled:hover:text-gray-400"
+                      title="Move down"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <textarea
                     className="flex-1 rounded border border-gray-200 px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary-400"
                     rows={2}
@@ -694,18 +1093,40 @@ function LetterEditor({ letter, onSaved, onClose }) {
             <div className="text-center text-xs text-gray-100 mb-3 font-medium tracking-wide uppercase">
               Live A4 Preview · Scroll to see full letter
             </div>
-            {/* A4 page scaled to fit viewport width */}
-            <div className="flex justify-center">
-              <div style={{
-                width: '210mm',
-                transform: 'scale(0.75)',
-                transformOrigin: 'top center',
-                marginBottom: 'calc(-25% * 297mm / 100)',
-              }}>
-                <A4Preview f={form} />
-              </div>
-            </div>
+            {/* Stacked A4 pages, scaled to fit viewport width */}
+            <ScaledPreview scale={0.75}>
+              <A4Preview f={form} />
+            </ScaledPreview>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Wraps scaled content and collapses the wrapper's layout box to match the
+// visually-scaled size, so a variable (multi-page) height doesn't leave a
+// stale blank gap below it — `transform: scale` alone does not shrink the
+// space an element reserves in normal flow.
+function ScaledPreview({ scale, children }) {
+  const innerRef = useRef(null);
+  const [height, setHeight] = useState(null);
+
+  useLayoutEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    const update = () => setHeight(el.offsetHeight * scale);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [scale]);
+
+  return (
+    <div className="flex justify-center" style={{ width: '100%', height: height ?? undefined }}>
+      <div style={{ width: `${A4_WIDTH_MM * scale}mm` }}>
+        <div ref={innerRef} style={{ width: '210mm', transform: `scale(${scale})`, transformOrigin: 'top center' }}>
+          {children}
         </div>
       </div>
     </div>
