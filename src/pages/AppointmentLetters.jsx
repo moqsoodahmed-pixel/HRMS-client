@@ -952,7 +952,7 @@ function LetterEditor({ letter, onSaved, onClose }) {
             <FI label="Date of Issue *" error={errors.dateOfIssue}>
               <input className={ic(errors.dateOfIssue)} value={form.dateOfIssue} onChange={set('dateOfIssue')} placeholder="e.g. 15 August 2026" />
             </FI>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FI label="Offer Letter Date">
                 <input className={ic()} value={form.offerLetterDate} onChange={set('offerLetterDate')} placeholder="11 August 2026" />
               </FI>
@@ -964,7 +964,7 @@ function LetterEditor({ letter, onSaved, onClose }) {
 
           {/* Employee */}
           <FS title="Employee">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FI label="Employee Code">
                 <input className={ic()} value={form.employeeCode} onChange={set('employeeCode')} placeholder="EMP-001" />
               </FI>
@@ -975,7 +975,7 @@ function LetterEditor({ letter, onSaved, onClose }) {
             <FI label="Full Name (with Mr./Ms.) *" error={errors.employeeFullName}>
               <input className={ic(errors.employeeFullName)} value={form.employeeFullName} onChange={set('employeeFullName')} placeholder="Mr. Srinivas" />
             </FI>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FI label="First Name">
                 <input className={ic()} value={form.employeeFirstName} onChange={set('employeeFirstName')} placeholder="Srinivas" />
               </FI>
@@ -1005,7 +1005,7 @@ function LetterEditor({ letter, onSaved, onClose }) {
 
           {/* Compensation */}
           <FS title="Compensation">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FI label="Monthly Salary (₹)">
                 <input className={ic()} value={form.compensation} onChange={set('compensation')} placeholder="30,000" />
               </FI>

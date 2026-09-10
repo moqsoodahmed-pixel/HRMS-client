@@ -77,14 +77,14 @@ function ReportForm({ existing, onSaved, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col">
+      <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col mx-4">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <h2 className="text-base font-semibold">{existing ? 'Edit' : 'Create'} Daily Report</h2>
           <button onClick={onClose}><X className="h-5 w-5 text-gray-400 hover:text-gray-600" /></button>
         </div>
 
         <div className="overflow-y-auto p-5 space-y-4 flex-1">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="form-label">Date</label>
               <input type="date" className="form-input" value={form.date} onChange={set('date')} max={today} disabled={!!existing} />
@@ -159,7 +159,7 @@ function ReportDetailModal({ reportId, canReview, onClose, onUpdated }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col">
+      <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col mx-4">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <h2 className="text-base font-semibold">Daily Report Detail</h2>
           <button onClick={onClose}><X className="h-5 w-5 text-gray-400 hover:text-gray-600" /></button>

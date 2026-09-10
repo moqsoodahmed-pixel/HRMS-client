@@ -987,7 +987,7 @@ function EmployeeDashboard() {
               <p className="text-xs text-gray-500">{myToday?.shift ? `Shift ${myToday.shift.start} – ${myToday.shift.end}` : ''} · {formatDate(new Date())}</p>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
             <div><p className="text-xs uppercase tracking-wide text-gray-400">Status</p><div className="mt-1">{myToday?.record ? <StatusBadge status={myToday.record.status} /> : <span className="text-sm text-gray-400">Not marked</span>}</div></div>
             <div><p className="text-xs uppercase tracking-wide text-gray-400">Check in</p><p className="mt-1 text-sm font-medium">{formatTime(myToday?.record?.checkIn)}</p></div>
             <div>

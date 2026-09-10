@@ -93,7 +93,7 @@ function MyAttendanceView() {
                 <p className="text-xs text-gray-500">Shift {myToday.shift?.start} – {myToday.shift?.end} · {formatDate(new Date())}</p>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
               <MiniStat label="Status" value={myToday.record ? <StatusBadge status={myToday.record.status} /> : <span className="text-sm text-gray-400">Not marked</span>} />
               <MiniStat label="Check in" value={<span className="text-sm font-medium">{formatTime(myToday.record?.checkIn)}</span>} />
               <MiniStat

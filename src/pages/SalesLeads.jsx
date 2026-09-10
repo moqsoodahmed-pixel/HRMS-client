@@ -128,7 +128,7 @@ function UploadSection({ onUploaded }) {
       {step === 'preview' && preview && (
         <div className="mt-4 rounded-lg bg-blue-50 border border-blue-200 p-4 text-sm">
           <p className="font-semibold text-blue-800 mb-2 flex items-center gap-2"><Info className="h-4 w-4" /> Preview</p>
-          <div className="grid grid-cols-3 gap-4 text-center mb-3">
+          <div className="grid grid-cols-3 gap-2 text-center mb-3 sm:gap-4">
             <div className="rounded bg-white p-3 border border-blue-100">
               <div className="text-2xl font-bold text-blue-700">{preview.totalRows}</div>
               <div className="text-xs text-gray-500 mt-1">Total Rows</div>
