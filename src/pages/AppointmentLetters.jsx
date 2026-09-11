@@ -20,6 +20,41 @@ const DESIGNATIONS = [
   'Accounts Executive',
 ];
 
+// ── Date helpers ──────────────────────────────────────────────────────────────
+// Convert yyyy-mm-dd (date input value) → "15 August 2026" for the letter
+function fmtDate(val) {
+  if (!val) return '';
+  const d = new Date(val + 'T00:00:00');
+  if (isNaN(d)) return val;
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+// Convert "15 August 2026" → yyyy-mm-dd for the date input
+function dateToInput(str) {
+  if (!str) return '';
+  const d = new Date(str);
+  if (isNaN(d)) return '';
+  return d.toISOString().slice(0, 10);
+}
+
+// ── Number to words ───────────────────────────────────────────────────────────
+const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+  'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',
+  'Eighteen', 'Nineteen'];
+const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+function _belowHundred(n) {
+  if (n < 20) return ONES[n];
+  return TENS[Math.floor(n / 10)] + (n % 10 ? ' ' + ONES[n % 10] : '');
+}
+function numberToWords(num) {
+  const n = parseInt(num, 10);
+  if (!n || isNaN(n) || n <= 0) return '';
+  if (n >= 10000000) return _belowHundred(Math.floor(n / 10000000)) + ' Crore ' + numberToWords(n % 10000000);
+  if (n >= 100000) return _belowHundred(Math.floor(n / 100000)) + ' Lakh ' + numberToWords(n % 100000);
+  if (n >= 1000) return _belowHundred(Math.floor(n / 1000)) + ' Thousand ' + numberToWords(n % 1000);
+  if (n >= 100) return ONES[Math.floor(n / 100)] + ' Hundred ' + numberToWords(n % 100);
+  return _belowHundred(n);
+}
+
 const ROLE_DUTIES = {
   'Sales Executive': [
     'Identifying and approaching potential clients to generate new business opportunities.',
@@ -757,6 +792,7 @@ function LetterEditor({ letter, onSaved, onClose }) {
   const [employees, setEmployees] = useState([]);
   const [savedId, setSavedId] = useState(letter?._id || null);
   const [saving, setSaving] = useState(false);
+  const [customDesig, setCustomDesig] = useState(false); // true when "Create new role" selected
   const [generating, setGenerating] = useState(false);
   const [pdfReady, setPdfReady] = useState(!!letter?.pdfPath);
   const [msg, setMsg] = useState({ type: '', text: '' });
@@ -950,14 +986,29 @@ function LetterEditor({ letter, onSaved, onClose }) {
           {/* Letter details */}
           <FS title="Letter Details">
             <FI label="Date of Issue *" error={errors.dateOfIssue}>
-              <input className={ic(errors.dateOfIssue)} value={form.dateOfIssue} onChange={set('dateOfIssue')} placeholder="e.g. 15 August 2026" />
+              <input
+                type="date"
+                className={ic(errors.dateOfIssue)}
+                value={dateToInput(form.dateOfIssue)}
+                onChange={e => setForm(f => ({ ...f, dateOfIssue: fmtDate(e.target.value) }))}
+              />
             </FI>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FI label="Offer Letter Date">
-                <input className={ic()} value={form.offerLetterDate} onChange={set('offerLetterDate')} placeholder="11 August 2026" />
+                <input
+                  type="date"
+                  className={ic()}
+                  value={dateToInput(form.offerLetterDate)}
+                  onChange={e => setForm(f => ({ ...f, offerLetterDate: fmtDate(e.target.value) }))}
+                />
               </FI>
               <FI label="Offer Letter Joining Date">
-                <input className={ic()} value={form.offerLetterJoiningDate} onChange={set('offerLetterJoiningDate')} placeholder="1 Sep 2026" />
+                <input
+                  type="date"
+                  className={ic()}
+                  value={dateToInput(form.offerLetterJoiningDate)}
+                  onChange={e => setForm(f => ({ ...f, offerLetterJoiningDate: fmtDate(e.target.value) }))}
+                />
               </FI>
             </div>
           </FS>
@@ -991,14 +1042,35 @@ function LetterEditor({ letter, onSaved, onClose }) {
           {/* Role & Designation */}
           <FS title="Role & Designation">
             <FI label="Designation *" error={errors.designation}>
-              <select
-                className={ic(errors.designation)}
-                value={form.designation}
-                onChange={e => loadRoleDuties(e.target.value)}
-              >
-                <option value="" disabled>Select a role…</option>
-                {DESIGNATIONS.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
+              {customDesig ? (
+                <div className="flex gap-2">
+                  <input
+                    className={ic(errors.designation) + ' flex-1'}
+                    value={form.designation}
+                    onChange={e => loadRoleDuties(e.target.value)}
+                    placeholder="Type new role name…"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs text-gray-500 whitespace-nowrap"
+                    onClick={() => { setCustomDesig(false); loadRoleDuties(''); }}
+                  >Cancel</button>
+                </div>
+              ) : (
+                <select
+                  className={ic(errors.designation)}
+                  value={form.designation}
+                  onChange={e => {
+                    if (e.target.value === '__custom__') { setCustomDesig(true); loadRoleDuties(''); }
+                    else loadRoleDuties(e.target.value);
+                  }}
+                >
+                  <option value="" disabled>Select a role…</option>
+                  {DESIGNATIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                  <option value="__custom__">＋ Create new role…</option>
+                </select>
+              )}
             </FI>
             <p className="text-xs text-gray-400">Duties below auto-load based on designation. You can edit them.</p>
           </FS>
@@ -1007,10 +1079,24 @@ function LetterEditor({ letter, onSaved, onClose }) {
           <FS title="Compensation">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <FI label="Monthly Salary (₹)">
-                <input className={ic()} value={form.compensation} onChange={set('compensation')} placeholder="30,000" />
+                <input
+                  className={ic()}
+                  value={form.compensation}
+                  onChange={e => {
+                    const val = e.target.value.replace(/,/g, '');
+                    const words = numberToWords(val).trim();
+                    setForm(f => ({ ...f, compensation: e.target.value, compensationWords: words }));
+                  }}
+                  placeholder="30000"
+                />
               </FI>
               <FI label="In Words">
-                <input className={ic()} value={form.compensationWords} onChange={set('compensationWords')} placeholder="Thirty Thousand" />
+                <input
+                  className={ic() + ' bg-gray-50'}
+                  value={form.compensationWords}
+                  onChange={set('compensationWords')}
+                  placeholder="Auto-filled from amount"
+                />
               </FI>
             </div>
             <label className="flex items-center gap-2 text-sm mt-2">
