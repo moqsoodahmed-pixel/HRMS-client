@@ -286,6 +286,7 @@ export const exitRequestAPI = {
 export const settingsAPI = {
   get: () => api.get('/settings'),
   update: (data) => api.patch('/settings', data),
+  telegramTest: () => api.post('/settings/telegram/test'),
 };
 
 export const offboardingAPI = {

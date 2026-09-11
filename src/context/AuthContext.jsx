@@ -74,8 +74,8 @@ export const ROUTE_ACCESS = {
   '/training': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
   '/performance': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
   '/exit': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
-  // Sales Leads — all authenticated roles may view the leads page
-  '/sales-leads': null,
+  // Sales Leads — only management roles + EMPLOYEE role (dept filter applied in Sidebar/SalesLeads page)
+  '/sales-leads': ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD', 'FINANCE', 'EMPLOYEE'],
   '/daily-reports': null,
   '/appointment-letters': ['HR_ADMIN'],
 };
@@ -138,7 +138,14 @@ export function AuthProvider({ children }) {
         if (!role) return false;
         if (isElevated) return true;
         const allowed = ROUTE_ACCESS[path];
-        return allowed === null || allowed === undefined || allowed.includes(role);
+        const hasAccess = allowed === null || allowed === undefined || allowed.includes(role);
+        if (!hasAccess) return false;
+        // For EMPLOYEE role, Sales Leads is only accessible if they are in the Sales department
+        if (path === '/sales-leads' && role === 'EMPLOYEE') {
+          const dept = employee?.department?.toLowerCase() || '';
+          return dept === 'sales' || dept.includes('sales') || dept.includes('business development');
+        }
+        return true;
       },
     };
   }, [user, employee, loading, login, logout]);

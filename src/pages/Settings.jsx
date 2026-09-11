@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Building2, Clock, CalendarDays, Wallet, LogOut, ShieldCheck, Save, ExternalLink, Lock,
+  Building2, Clock, CalendarDays, Wallet, LogOut, ShieldCheck, Save, ExternalLink, Lock, Send,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { settingsAPI, leaveAPI, payrollAPI } from '../api/axios';
@@ -97,6 +97,52 @@ export default function Settings() {
           <SectionSaveButton onSave={() => submitSection('exit')} disabled={!form?.exit} loading={save.isPending} />
         </SettingsSection>
 
+        <SettingsSection icon={Send} title="Telegram Notifications" description="Send clock-in / clock-out alerts to a Telegram group or personal chat. Get your Bot Token from @BotFather and your Chat ID from @userinfobot.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Bot Token" hint="From @BotFather — leave blank to keep existing value">
+              <input
+                className="input font-mono text-sm"
+                value={active.telegram?.botToken || ''}
+                onChange={(e) => update('telegram', { botToken: e.target.value })}
+                placeholder="1234567890:AAF..."
+                autoComplete="off"
+              />
+            </FormField>
+            <FormField label="Group / Chat ID" hint="From @userinfobot or the group chat info">
+              <input
+                className="input font-mono text-sm"
+                value={active.telegram?.notifyChatId || ''}
+                onChange={(e) => update('telegram', { notifyChatId: e.target.value })}
+                placeholder="-1001234567890"
+              />
+            </FormField>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-6">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-primary-600"
+                checked={active.telegram?.enabled ?? false}
+                onChange={(e) => update('telegram', { enabled: e.target.checked })}
+              />
+              Enable clock-in notifications
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-primary-600"
+                checked={active.telegram?.notifyClockOut ?? false}
+                onChange={(e) => update('telegram', { notifyClockOut: e.target.checked })}
+              />
+              Also notify on clock-out
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <TelegramTestButton />
+            <SectionSaveButton onSave={() => submitSection('telegram')} disabled={!form?.telegram} loading={save.isPending} />
+          </div>
+        </SettingsSection>
+
         <SettingsSection icon={ShieldCheck} title="Security" description="Current account-security policy (read-only — not database-configurable in this build).">
           <ul className="space-y-2 text-sm text-gray-700">
             <li className="flex items-center gap-2"><Lock className="h-3.5 w-3.5 text-gray-400" /> Account lockout after 5 failed login attempts, for 30 minutes.</li>
@@ -144,6 +190,26 @@ function LeaveSummary() {
         Manage leave types <ExternalLink className="h-3.5 w-3.5" />
       </Link>
     </div>
+  );
+}
+
+function TelegramTestButton() {
+  const [testing, setTesting] = useState(false);
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      await settingsAPI.telegramTest();
+      toast.success('Test message sent! Check your Telegram group.');
+    } catch (err) {
+      toast.error('Failed: ' + errorMessage(err));
+    } finally {
+      setTesting(false);
+    }
+  };
+  return (
+    <button type="button" className="btn-secondary flex items-center gap-2" onClick={handleTest} disabled={testing}>
+      <Send className="h-4 w-4" /> {testing ? 'Sending…' : 'Send test message'}
+    </button>
   );
 }
 
