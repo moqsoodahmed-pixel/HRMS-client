@@ -11,8 +11,8 @@ const TEAM_SCOPED_ROLES = ['MANAGER', 'PROJECT_HEAD'];
 const PERMISSIONS = {
   // Employees
   viewEmployees: ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
-  manageEmployees: ['HR_ADMIN'],
-  revealIdentity: ['HR_ADMIN'],
+  manageEmployees: ['HR_ADMIN', 'PROJECT_HEAD'],
+  revealIdentity: ['HR_ADMIN', 'PROJECT_HEAD'],
   // Attendance
   manageAttendance: ['HR_ADMIN'],
   viewAllAttendance: ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],

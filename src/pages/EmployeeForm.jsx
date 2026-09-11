@@ -13,7 +13,7 @@ import { errorMessage, fieldErrors, humanise, formatDate } from '../lib/format';
 
 const EMPTY_FORM = {
   employeeCode: '', firstName: '', lastName: '', officialEmail: '', personalEmail: '', personalMobile: '', officialMobile: '',
-  designation: '', department: '', employmentType: 'FULL_TIME', status: 'ACTIVE', dateOfJoining: '',
+  designation: '', department: '', employmentType: 'FULL_TIME', status: 'ACTIVE', dateOfJoining: '', role: 'EMPLOYEE',
   probationEndDate: '', confirmationDate: '', dateOfExit: '', exitReason: '', noticePeriodDays: '',
   workLocation: '', dateOfBirth: '', gender: '', bloodGroup: '', nationality: 'Indian', manager: '',
 };
@@ -30,7 +30,7 @@ export default function EmployeeForm() {
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { can } = useAuth();
+  const { can, user, isElevated } = useAuth();
 
   const { data, isLoading } = useQuery({ queryKey: ['employee', id], queryFn: () => employeeAPI.get(id), enabled: isEdit });
   const managersQuery = useQuery({ queryKey: ['employees', 'options'], queryFn: () => employeeAPI.options(), staleTime: 5 * 60 * 1000 });
@@ -226,6 +226,33 @@ export default function EmployeeForm() {
                 <Select value={form.department} onChange={(e) => set('department', e.target.value)} options={DEPARTMENTS} placeholder="Select department" />
               </FormField>
             </div>
+            {/* Account role — only shown when creating a new employee, not editing */}
+            {!isEdit && (
+              <FormField label="Account Role">
+                <select
+                  className="input"
+                  value={form.role}
+                  onChange={(e) => set('role', e.target.value)}
+                >
+                  <option value="EMPLOYEE">Employee</option>
+                  <option value="MANAGER">Manager</option>
+                  <option value="HR_ADMIN">HR Admin</option>
+                  <option value="PROJECT_HEAD">Project Head</option>
+                  <option value="FINANCE">Finance</option>
+                  <option value="IT_HEAD">IT Head</option>
+                  <option value="AUDITOR">Auditor</option>
+                  <option value="DIRECTOR">Director</option>
+                  {/* Only elevated roles (FOUNDER_CEO / CTO) can assign elevated roles */}
+                  {isElevated && (
+                    <>
+                      <option value="CTO">CTO</option>
+                      <option value="FOUNDER_CEO">Founder / CEO</option>
+                    </>
+                  )}
+                </select>
+                <p className="mt-1 text-xs text-gray-400">Sets the login permissions for this employee.</p>
+              </FormField>
+            )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField label="Employment Type">
                 <Select value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)} options={EMPLOYMENT_TYPES} />
