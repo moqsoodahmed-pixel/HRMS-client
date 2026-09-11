@@ -351,5 +351,16 @@ export const appointmentLetterAPI = {
   get: (id) => api.get(`/appointment-letters/${id}`),
   update: (id, data) => api.patch(`/appointment-letters/${id}`, data),
   generate: (id) => api.post(`/appointment-letters/${id}/generate`),
-  downloadUrl: (id) => `/api/appointment-letters/${id}/pdf`,
+  downloadUrl: (id) => `${import.meta.env.VITE_API_URL || '/api'}/appointment-letters/${id}/pdf`,
+  downloadPDF: async (id, filename) => {
+    const res = await api.get(`/appointment-letters/${id}/pdf`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || `appointment_letter_${id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
 };

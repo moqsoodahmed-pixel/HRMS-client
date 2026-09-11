@@ -938,10 +938,12 @@ function LetterEditor({ letter, onSaved, onClose }) {
             Generate PDF
           </button>
           {pdfReady && savedId && (
-            <a href={appointmentLetterAPI.downloadUrl(savedId)} target="_blank" rel="noopener noreferrer"
-               className="btn-secondary flex items-center gap-1.5 py-1.5 text-sm">
+            <button
+              onClick={() => appointmentLetterAPI.downloadPDF(savedId, `appointment_${form.employeeFullName || savedId}.pdf`).catch(() => {})}
+              className="btn-secondary flex items-center gap-1.5 py-1.5 text-sm"
+            >
               <Download className="h-4 w-4" /> Download
-            </a>
+            </button>
           )}
           <button onClick={onClose} className="btn-ghost p-1.5"><X className="h-4 w-4" /></button>
         </div>
@@ -1339,10 +1341,12 @@ export default function AppointmentLetters() {
                           <Edit2 className="h-4 w-4" />
                         </button>
                         {l.pdfPath && (
-                          <a href={appointmentLetterAPI.downloadUrl(l._id)} target="_blank" rel="noopener noreferrer"
-                             className="text-green-600 hover:text-green-800" title="Download PDF">
+                          <button
+                            onClick={() => appointmentLetterAPI.downloadPDF(l._id, `appointment_${l.employeeFullName || l._id}.pdf`).catch(() => {})}
+                            className="text-green-600 hover:text-green-800" title="Download PDF"
+                          >
                             <Download className="h-4 w-4" />
-                          </a>
+                          </button>
                         )}
                       </div>
                     </td>
