@@ -70,7 +70,7 @@ export default function Settings() {
         <SettingsSection icon={Clock} title="Attendance" description="Work-hours window used for check-in lateness and hours worked. Leave blank to use the server default.">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <FormField label="Work Start Time" hint="24-hour HH:mm">
-              <input type="time" className="input" value={active.attendance?.workStartTime || ''} onChange={(e) => update('attendance', { workStartTime: e.target.value })} />
+              <input type="time" className="input" value={active.attendance?.workStartTime || '10:30'} onChange={(e) => update('attendance', { workStartTime: e.target.value })} />
             </FormField>
             <FormField label="Work End Time" hint="24-hour HH:mm">
               <input type="time" className="input" value={active.attendance?.workEndTime || ''} onChange={(e) => update('attendance', { workEndTime: e.target.value })} />
