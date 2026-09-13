@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useLayoutEffect, useRef, Fragment } f
 import {
   Plus, RefreshCw, Eye, Download, FileText, X, User, Search,
   ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Save, Zap, AlertCircle, CheckCircle2,
-  Trash2, Edit2, RotateCcw,
+  Trash2, Edit2, RotateCcw, Send, XCircle, RotateCw, Mail,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { appointmentLetterAPI, employeeAPI } from '../api/axios';
@@ -898,6 +898,13 @@ function LetterEditor({ letter, onSaved, onClose }) {
   const [customDesig, setCustomDesig] = useState(false); // true when "Create new role" selected
   const [generating, setGenerating] = useState(false);
   const [pdfReady, setPdfReady] = useState(!!letter?.pdfPath);
+  const [letterStatus, setLetterStatus] = useState(letter?.status || 'DRAFT');
+  const [signing, setSigning] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [showEmailPrompt, setShowEmailPrompt] = useState(false);
+  const [signingEmail, setSigningEmail] = useState(letter?.employee?.email || '');
+  const [signingUrl, setSigningUrl] = useState(letter?.documensoSigningUrl || null);
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [errors, setErrors] = useState({});
 
@@ -1006,6 +1013,53 @@ function LetterEditor({ letter, onSaved, onClose }) {
     } finally { setGenerating(false); }
   };
 
+  const handleSendForSigning = async () => {
+    if (!savedId) { setMsg({ type: 'error', text: 'Save the letter first.' }); return; }
+    if (!signingEmail.trim()) { setMsg({ type: 'error', text: 'Enter employee email.' }); return; }
+    setSigning(true); setMsg({}); setShowEmailPrompt(false);
+    try {
+      const res = await appointmentLetterAPI.sendForSigning(savedId, { employeeEmail: signingEmail });
+      setLetterStatus('SENT_FOR_SIGNING');
+      setSigningUrl(res.data.data.signingUrl);
+      setMsg({ type: 'success', text: 'Sent for signing! Employee will receive an email from Documenso.' });
+      onSaved();
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.error?.message || 'Failed to send for signing.' });
+    } finally { setSigning(false); }
+  };
+
+  const handleCancelSigning = async () => {
+    if (!savedId) return;
+    setCancelling(true); setMsg({});
+    try {
+      await appointmentLetterAPI.cancelSigning(savedId, { reason: 'Cancelled by HR' });
+      setLetterStatus('GENERATED');
+      setSigningUrl(null);
+      setMsg({ type: 'success', text: 'Signing request cancelled. Letter reverted to Generated.' });
+      onSaved();
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.error?.message || 'Cancel failed.' });
+    } finally { setCancelling(false); }
+  };
+
+  const handleSyncStatus = async () => {
+    if (!savedId) return;
+    setSyncing(true); setMsg({});
+    try {
+      const res = await appointmentLetterAPI.syncStatus(savedId);
+      const { status, documensoStatus, signedAt } = res.data.data;
+      setLetterStatus(status);
+      if (status === 'SIGNED') {
+        setMsg({ type: 'success', text: `Signed! ✅ Employee signed on ${signedAt ? new Date(signedAt).toLocaleDateString('en-IN') : 'recently'}.` });
+      } else {
+        setMsg({ type: 'success', text: `Status synced: ${documensoStatus || status}` });
+      }
+      onSaved();
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.error?.message || 'Sync failed.' });
+    } finally { setSyncing(false); }
+  };
+
   const filtered = empSearch.length > 1
     ? employees.filter(e =>
         e.fullName.toLowerCase().includes(empSearch.toLowerCase()) ||
@@ -1048,9 +1102,86 @@ function LetterEditor({ letter, onSaved, onClose }) {
               <Download className="h-4 w-4" /> Download
             </button>
           )}
+          {/* Send for Signing — only when PDF is generated */}
+          {pdfReady && savedId && letterStatus === 'GENERATED' && (
+            <button
+              onClick={() => setShowEmailPrompt(true)}
+              disabled={signing}
+              className="btn-primary flex items-center gap-1.5 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700"
+            >
+              <Send className="h-4 w-4" /> Send for Signing
+            </button>
+          )}
+          {/* Cancel signing — only when sent */}
+          {savedId && letterStatus === 'SENT_FOR_SIGNING' && (
+            <button
+              onClick={handleCancelSigning}
+              disabled={cancelling}
+              className="btn-secondary flex items-center gap-1.5 py-1.5 text-sm text-red-600 border-red-300"
+            >
+              {cancelling ? <RefreshCw className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+              Cancel Signing
+            </button>
+          )}
+          {/* Sync status — when sent or signed */}
+          {savedId && (letterStatus === 'SENT_FOR_SIGNING' || letterStatus === 'SIGNED') && (
+            <button
+              onClick={handleSyncStatus}
+              disabled={syncing}
+              className="btn-secondary flex items-center gap-1.5 py-1.5 text-sm"
+            >
+              {syncing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4" />}
+              Refresh Status
+            </button>
+          )}
           <button onClick={onClose} className="btn-ghost p-1.5"><X className="h-4 w-4" /></button>
         </div>
       </div>
+
+      {/* Email prompt modal for Send for Signing */}
+      {showEmailPrompt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[360px] space-y-4">
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-indigo-600" />
+              <span className="font-semibold text-gray-800">Send for e-Signing</span>
+            </div>
+            <p className="text-sm text-gray-500">The employee will receive an email from Documenso with a signing link.</p>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Employee Email *</label>
+              <input
+                type="email"
+                value={signingEmail}
+                onChange={e => setSigningEmail(e.target.value)}
+                placeholder="employee@example.com"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowEmailPrompt(false)} className="btn-secondary py-1.5 px-3 text-sm">Cancel</button>
+              <button
+                onClick={handleSendForSigning}
+                disabled={signing || !signingEmail.trim()}
+                className="btn-primary py-1.5 px-3 text-sm bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1.5"
+              >
+                {signing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Send Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Signing URL banner — fallback direct link HR can share */}
+      {signingUrl && letterStatus === 'SENT_FOR_SIGNING' && (
+        <div className="bg-indigo-50 border-b border-indigo-200 px-4 py-2 flex items-center gap-2 text-sm text-indigo-700 flex-shrink-0">
+          <Send className="h-4 w-4 flex-shrink-0" />
+          <span className="font-medium">Sent for signing.</span>
+          <span className="text-indigo-500">Direct link (share if email doesn't arrive):</span>
+          <a href={signingUrl} target="_blank" rel="noopener noreferrer"
+            className="underline truncate max-w-xs hover:text-indigo-900">{signingUrl}</a>
+        </div>
+      )}
 
       {/* Body: left form + right A4 preview */}
       <div className="flex flex-1 overflow-hidden">
@@ -1379,9 +1510,21 @@ export default function AppointmentLetters() {
   };
 
   const STATUS_CLS = {
-    DRAFT: 'bg-gray-100 text-gray-600',
-    GENERATED: 'bg-blue-100 text-blue-700',
-    ISSUED: 'bg-green-100 text-green-700',
+    DRAFT:            'bg-gray-100 text-gray-600',
+    GENERATED:        'bg-blue-100 text-blue-700',
+    SENT_FOR_SIGNING: 'bg-indigo-100 text-indigo-700',
+    SIGNED:           'bg-green-100 text-green-700',
+    ISSUED:           'bg-green-100 text-green-700',
+  };
+
+  const [syncingId, setSyncingId] = useState(null);
+  const handleListSync = async (id) => {
+    setSyncingId(id);
+    try {
+      await appointmentLetterAPI.syncStatus(id);
+      await loadLetters();
+    } catch (_) {}
+    setSyncingId(null);
   };
 
   return (
@@ -1449,6 +1592,15 @@ export default function AppointmentLetters() {
                             className="text-green-600 hover:text-green-800" title="Download PDF"
                           >
                             <Download className="h-4 w-4" />
+                          </button>
+                        )}
+                        {l.status === 'SENT_FOR_SIGNING' && (
+                          <button
+                            onClick={() => handleListSync(l._id)}
+                            disabled={syncingId === l._id}
+                            className="text-indigo-600 hover:text-indigo-800" title="Refresh signing status"
+                          >
+                            <RotateCw className={`h-4 w-4 ${syncingId === l._id ? 'animate-spin' : ''}`} />
                           </button>
                         )}
                       </div>
