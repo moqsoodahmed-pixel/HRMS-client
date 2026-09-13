@@ -40,11 +40,14 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-primary-600 p-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20">
-            <span className="text-3xl font-bold text-white">D</span>
+          <div className="mx-auto mb-4 flex items-center justify-center rounded-2xl bg-white px-6 py-3">
+            <img
+              src="/dutylaunch-logo.webp"
+              alt="DutyLaunch"
+              className="h-10 w-auto object-contain"
+            />
           </div>
-          <h1 className="text-2xl font-bold text-white">DutyLaunch HRMS</h1>
-          <p className="text-primary-200">DutyLaunch Solutions Private Limited</p>
+          <p className="text-primary-200">HRMS Portal</p>
         </div>
 
         <div className="card p-6">

@@ -124,9 +124,13 @@ export default function Sidebar({ mobileOpen, onClose }) {
 function SidebarShell({ onClose, children }) {
   return (
     <>
-      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4">
-        <div>
-          <h1 className="text-lg font-bold text-primary-700">DutyLaunch</h1>
+      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+        <div className="flex flex-col gap-1">
+          <img
+            src="/dutylaunch-logo.webp"
+            alt="DutyLaunch"
+            className="h-8 w-auto object-contain"
+          />
           <p className="text-xs text-gray-400">HRMS Portal</p>
         </div>
         <button type="button" className="btn-ghost lg:hidden" onClick={onClose} aria-label="Close navigation">
