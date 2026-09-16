@@ -18,6 +18,8 @@ const STATUS_COLORS = {
 };
 
 const STATUS_OPTIONS = ['NEW', 'CONTACTED', 'INTERESTED', 'NOT_INTERESTED', 'CONVERTED', 'LOST'];
+const CALL_STATUS_OPTIONS = ['Busy', 'Connected', 'Switched Off', 'not answered', 'picked but disconnected', 'out of service', 'call later'];
+const SERVICE_INTEREST_OPTIONS = ['Startup India', 'GST', 'MSME', 'Trademark', 'Labour Certificate', 'Website Development', 'Others'];
 const UPLOAD_ROLES = ['FOUNDER_CEO', 'CTO', 'SUPER_ADMIN', 'PROJECT_HEAD'];
 const MGMT_ROLES = ['FOUNDER_CEO', 'CTO', 'SUPER_ADMIN', 'PROJECT_HEAD', 'HR_ADMIN', 'MANAGER', 'DIRECTOR'];
 
@@ -271,6 +273,9 @@ function StatsDashboard() {
 // ── Status Update Modal ──────────────────────────────────────────────────────
 function StatusModal({ lead, onClose, onUpdated }) {
   const [status, setStatus] = useState(lead.status);
+  const [callStatus, setCallStatus] = useState(lead.callStatus || '');
+  const [serviceInterest, setServiceInterest] = useState(lead.serviceInterest || '');
+  const [callNotes, setCallNotes] = useState(lead.callNotes || '');
   const [notes, setNotes] = useState(lead.notes || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -279,7 +284,7 @@ function StatusModal({ lead, onClose, onUpdated }) {
     setSaving(true);
     setError('');
     try {
-      await leadsAPI.updateStatus(lead._id, { status, notes });
+      await leadsAPI.updateStatus(lead._id, { status, notes, callStatus, serviceInterest, callNotes });
       onUpdated();
       onClose();
     } catch (err) {
@@ -297,7 +302,7 @@ function StatusModal({ lead, onClose, onUpdated }) {
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="form-label">Status</label>
+            <label className="form-label">Lead Status</label>
             <select className="form-input" value={status} onChange={e => setStatus(e.target.value)}>
               {STATUS_OPTIONS.map(s => (
                 <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
@@ -305,8 +310,30 @@ function StatusModal({ lead, onClose, onUpdated }) {
             </select>
           </div>
           <div>
-            <label className="form-label">Notes</label>
-            <textarea className="form-input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes about this lead…" />
+            <label className="form-label">Call Status</label>
+            <select className="form-input" value={callStatus} onChange={e => setCallStatus(e.target.value)}>
+              <option value="">— Select call outcome —</option>
+              {CALL_STATUS_OPTIONS.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="form-label">Service Interest</label>
+            <select className="form-input" value={serviceInterest} onChange={e => setServiceInterest(e.target.value)}>
+              <option value="">— Select service —</option>
+              {SERVICE_INTEREST_OPTIONS.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="form-label">Call Notes</label>
+            <input className="form-input" value={callNotes} onChange={e => setCallNotes(e.target.value)} placeholder="e.g. Ntg rqd, Call back tomorrow…" />
+          </div>
+          <div>
+            <label className="form-label">General Notes</label>
+            <textarea className="form-input" rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes about this lead…" />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
@@ -411,6 +438,9 @@ function LeadHistoryModal({ leadId, onClose }) {
                 <div><span className="text-gray-500">Email:</span> <span className="font-medium">{lead.email || '—'}</span></div>
                 <div><span className="text-gray-500">Assigned to:</span> <span className="font-medium">{lead.assignedTo?.fullName || 'Unassigned'}</span></div>
                 <div><span className="text-gray-500">Status:</span> <StatusBadge status={lead.status} /></div>
+                {lead.callStatus && <div><span className="text-gray-500">Call Status:</span> <span className="font-medium">{lead.callStatus}</span></div>}
+                {lead.serviceInterest && <div><span className="text-gray-500">Service Interest:</span> <span className="font-medium">{lead.serviceInterest}</span></div>}
+                {lead.callNotes && <div className="col-span-2"><span className="text-gray-500">Call Notes:</span> <span className="font-medium">{lead.callNotes}</span></div>}
               </div>
 
               {lead.statusHistory?.length > 0 && (
@@ -616,6 +646,9 @@ export default function SalesLeads() {
                       <th className="px-4 py-3 text-left">Contact</th>
                       {isMgmt && <th className="px-4 py-3 text-left">Assigned To</th>}
                       <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Call Status</th>
+                      <th className="px-4 py-3 text-left">Service Interest</th>
+                      <th className="px-4 py-3 text-left">Call Notes</th>
                       <th className="px-4 py-3 text-left">Notes</th>
                       {isMgmt && <th className="px-4 py-3 text-left">Batch</th>}
                       <th className="px-4 py-3 text-left">Actions</th>
@@ -679,6 +712,23 @@ export default function SalesLeads() {
                           </td>
                         )}
                         <td className="px-4 py-3"><StatusBadge status={lead.status} /></td>
+                        <td className="px-4 py-3">
+                          {lead.callStatus ? (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700">
+                              {lead.callStatus}
+                            </span>
+                          ) : <span className="text-xs text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {lead.serviceInterest ? (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-teal-100 text-teal-700">
+                              {lead.serviceInterest}
+                            </span>
+                          ) : <span className="text-xs text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 max-w-xs">
+                          <p className="text-xs text-gray-600 truncate">{lead.callNotes || '—'}</p>
+                        </td>
                         <td className="px-4 py-3 max-w-xs">
                           <p className="text-xs text-gray-500 truncate">{lead.notes || '—'}</p>
                         </td>
