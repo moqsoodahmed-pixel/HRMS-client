@@ -118,7 +118,7 @@ export default function EmployeeForm() {
 
   const validateStep1 = () => {
     const next = {};
-    if (!form.employeeCode.trim()) next.employeeCode = 'Employee code is required.';
+    if (!isEdit && !form.employeeCode.trim()) next.employeeCode = 'Employee code is required.';
     if (!form.firstName.trim()) next.firstName = 'First name is required.';
     if (!/^\S+@\S+\.\S+$/.test(form.officialEmail)) next.officialEmail = 'Enter a valid official email.';
     if (form.personalEmail && !/^\S+@\S+\.\S+$/.test(form.personalEmail)) next.personalEmail = 'Enter a valid email or leave it blank.';
@@ -456,43 +456,45 @@ export default function EmployeeForm() {
           <div className="card space-y-4 p-5">
             <h3 className="section-title">Change Password</h3>
             <p className="text-sm text-gray-500">Set a new login password for this employee.</p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <FormField label="New Password" required error={pwErrors.newPassword}>
-                <div className="relative">
-                  <input
-                    type={showNewPassword ? 'text' : 'password'}
-                    className="input pr-10"
-                    value={pwForm.newPassword}
-                    onChange={(e) => setPwForm((p) => ({ ...p, newPassword: e.target.value }))}
-                    placeholder="Min. 8 characters"
-                    autoComplete="new-password"
-                  />
-                  <button type="button" className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600" onClick={() => setShowNewPassword((v) => !v)} tabIndex={-1}>
-                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </FormField>
-              <FormField label="Confirm New Password" required error={pwErrors.confirmNewPassword}>
-                <div className="relative">
-                  <input
-                    type={showNewConfirmPassword ? 'text' : 'password'}
-                    className="input pr-10"
-                    value={pwForm.confirmNewPassword}
-                    onChange={(e) => setPwForm((p) => ({ ...p, confirmNewPassword: e.target.value }))}
-                    placeholder="Re-enter new password"
-                    autoComplete="new-password"
-                  />
-                  <button type="button" className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600" onClick={() => setShowNewConfirmPassword((v) => !v)} tabIndex={-1}>
-                    {showNewConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </FormField>
-            </div>
-            <div className="flex justify-end">
-              <button type="button" className="btn-primary" onClick={handlePasswordChange} disabled={changePasswordMut.isPending}>
-                {changePasswordMut.isPending ? 'Updating…' : 'Update Password'}
-              </button>
-            </div>
+            <form onSubmit={handlePasswordChange} noValidate>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="New Password" required error={pwErrors.newPassword}>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      className="input pr-10"
+                      value={pwForm.newPassword}
+                      onChange={(e) => setPwForm((p) => ({ ...p, newPassword: e.target.value }))}
+                      placeholder="Min. 8 characters"
+                      autoComplete="new-password"
+                    />
+                    <button type="button" className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600" onClick={() => setShowNewPassword((v) => !v)} tabIndex={-1}>
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </FormField>
+                <FormField label="Confirm New Password" required error={pwErrors.confirmNewPassword}>
+                  <div className="relative">
+                    <input
+                      type={showNewConfirmPassword ? 'text' : 'password'}
+                      className="input pr-10"
+                      value={pwForm.confirmNewPassword}
+                      onChange={(e) => setPwForm((p) => ({ ...p, confirmNewPassword: e.target.value }))}
+                      placeholder="Re-enter new password"
+                      autoComplete="new-password"
+                    />
+                    <button type="button" className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600" onClick={() => setShowNewConfirmPassword((v) => !v)} tabIndex={-1}>
+                      {showNewConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </FormField>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button type="submit" className="btn-primary" disabled={changePasswordMut.isPending}>
+                  {changePasswordMut.isPending ? 'Updating…' : 'Update Password'}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
