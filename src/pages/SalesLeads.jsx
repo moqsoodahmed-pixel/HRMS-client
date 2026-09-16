@@ -18,8 +18,6 @@ const STATUS_COLORS = {
 };
 
 const STATUS_OPTIONS = ['NEW', 'CONTACTED', 'INTERESTED', 'NOT_INTERESTED', 'CONVERTED', 'LOST'];
-const CALL_STATUS_OPTIONS = ['Busy', 'Connected', 'Switched Off', 'not answered', 'picked but disconnected', 'out of service', 'call later'];
-const SERVICE_INTEREST_OPTIONS = ['Startup India', 'GST', 'MSME', 'Trademark', 'Labour Certificate', 'Website Development', 'Others'];
 const UPLOAD_ROLES = ['FOUNDER_CEO', 'CTO', 'SUPER_ADMIN', 'PROJECT_HEAD'];
 const MGMT_ROLES = ['FOUNDER_CEO', 'CTO', 'SUPER_ADMIN', 'PROJECT_HEAD', 'HR_ADMIN', 'MANAGER', 'DIRECTOR'];
 
@@ -273,9 +271,6 @@ function StatsDashboard() {
 // ── Status Update Modal ──────────────────────────────────────────────────────
 function StatusModal({ lead, onClose, onUpdated }) {
   const [status, setStatus] = useState(lead.status);
-  const [callStatus, setCallStatus] = useState(lead.callStatus || '');
-  const [serviceInterest, setServiceInterest] = useState(lead.serviceInterest || '');
-  const [callNotes, setCallNotes] = useState(lead.callNotes || '');
   const [notes, setNotes] = useState(lead.notes || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -284,7 +279,7 @@ function StatusModal({ lead, onClose, onUpdated }) {
     setSaving(true);
     setError('');
     try {
-      await leadsAPI.updateStatus(lead._id, { status, notes, callStatus, serviceInterest, callNotes });
+      await leadsAPI.updateStatus(lead._id, { status, notes });
       onUpdated();
       onClose();
     } catch (err) {
@@ -302,7 +297,7 @@ function StatusModal({ lead, onClose, onUpdated }) {
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="form-label">Lead Status</label>
+            <label className="form-label">Status</label>
             <select className="form-input" value={status} onChange={e => setStatus(e.target.value)}>
               {STATUS_OPTIONS.map(s => (
                 <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
@@ -310,30 +305,8 @@ function StatusModal({ lead, onClose, onUpdated }) {
             </select>
           </div>
           <div>
-            <label className="form-label">Call Status</label>
-            <select className="form-input" value={callStatus} onChange={e => setCallStatus(e.target.value)}>
-              <option value="">— Select call outcome —</option>
-              {CALL_STATUS_OPTIONS.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="form-label">Service Interest</label>
-            <select className="form-input" value={serviceInterest} onChange={e => setServiceInterest(e.target.value)}>
-              <option value="">— Select service —</option>
-              {SERVICE_INTEREST_OPTIONS.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="form-label">Call Notes</label>
-            <input className="form-input" value={callNotes} onChange={e => setCallNotes(e.target.value)} placeholder="e.g. Ntg rqd, Call back tomorrow…" />
-          </div>
-          <div>
-            <label className="form-label">General Notes</label>
-            <textarea className="form-input" rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes about this lead…" />
+            <label className="form-label">Notes</label>
+            <textarea className="form-input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes about this lead…" />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
@@ -438,9 +411,6 @@ function LeadHistoryModal({ leadId, onClose }) {
                 <div><span className="text-gray-500">Email:</span> <span className="font-medium">{lead.email || '—'}</span></div>
                 <div><span className="text-gray-500">Assigned to:</span> <span className="font-medium">{lead.assignedTo?.fullName || 'Unassigned'}</span></div>
                 <div><span className="text-gray-500">Status:</span> <StatusBadge status={lead.status} /></div>
-                {lead.callStatus && <div><span className="text-gray-500">Call Status:</span> <span className="font-medium">{lead.callStatus}</span></div>}
-                {lead.serviceInterest && <div><span className="text-gray-500">Service Interest:</span> <span className="font-medium">{lead.serviceInterest}</span></div>}
-                {lead.callNotes && <div className="col-span-2"><span className="text-gray-500">Call Notes:</span> <span className="font-medium">{lead.callNotes}</span></div>}
               </div>
 
               {lead.statusHistory?.length > 0 && (
@@ -494,7 +464,7 @@ export default function SalesLeads() {
   const isMgmt = MGMT_ROLES.includes(role) || isElevated;
   const isEmployee = role === 'EMPLOYEE';
 
-  // Reveal state — only one lead at a time, 10s timer
+  // Reveal state — only one lead at a time, 20s timer
   const [revealed, setRevealed] = useState(null); // { leadId, email, phone, countdown }
   const revealTimerRef = useRef(null);
   const revealCountRef = useRef(null);
@@ -511,7 +481,7 @@ export default function SalesLeads() {
     try {
       const res = await leadsAPI.reveal(leadId);
       const { email, phone } = res.data.data;
-      setRevealed({ leadId, email, phone, countdown: 10 });
+      setRevealed({ leadId, email, phone, countdown: 20 });
       // Countdown ticker
       revealCountRef.current = setInterval(() => {
         setRevealed(prev => {
@@ -646,9 +616,6 @@ export default function SalesLeads() {
                       <th className="px-4 py-3 text-left">Contact</th>
                       {isMgmt && <th className="px-4 py-3 text-left">Assigned To</th>}
                       <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-left">Call Status</th>
-                      <th className="px-4 py-3 text-left">Service Interest</th>
-                      <th className="px-4 py-3 text-left">Call Notes</th>
                       <th className="px-4 py-3 text-left">Notes</th>
                       {isMgmt && <th className="px-4 py-3 text-left">Batch</th>}
                       <th className="px-4 py-3 text-left">Actions</th>
@@ -667,7 +634,7 @@ export default function SalesLeads() {
                         </td>
                         <td className="px-4 py-3">
                           {isEmployee ? (
-                            // EMPLOYEE: masked by default, reveal one at a time for 10s
+                            // EMPLOYEE: masked by default, reveal one at a time for 20s
                             revealed?.leadId === lead._id ? (
                               <div className="space-y-0.5">
                                 <div className="flex items-center gap-1 text-xs text-gray-700 font-medium">
@@ -686,7 +653,7 @@ export default function SalesLeads() {
                                 onClick={() => handleReveal(lead._id)}
                                 className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800 font-medium border border-primary-200 rounded px-2 py-1 hover:bg-primary-50 transition-colors"
                               >
-                                <Eye className="h-3 w-3" /> Reveal (10s)
+                                <Eye className="h-3 w-3" /> Reveal (20s)
                               </button>
                             )
                           ) : (
@@ -712,23 +679,6 @@ export default function SalesLeads() {
                           </td>
                         )}
                         <td className="px-4 py-3"><StatusBadge status={lead.status} /></td>
-                        <td className="px-4 py-3">
-                          {lead.callStatus ? (
-                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700">
-                              {lead.callStatus}
-                            </span>
-                          ) : <span className="text-xs text-gray-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          {lead.serviceInterest ? (
-                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-teal-100 text-teal-700">
-                              {lead.serviceInterest}
-                            </span>
-                          ) : <span className="text-xs text-gray-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3 max-w-xs">
-                          <p className="text-xs text-gray-600 truncate">{lead.callNotes || '—'}</p>
-                        </td>
                         <td className="px-4 py-3 max-w-xs">
                           <p className="text-xs text-gray-500 truncate">{lead.notes || '—'}</p>
                         </td>
