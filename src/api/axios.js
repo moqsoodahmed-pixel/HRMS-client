@@ -103,6 +103,8 @@ export const attendanceAPI = {
   today: () => api.get('/attendance/me/today'),
   checkIn: () => api.post('/attendance/checkin'),
   checkOut: () => api.post('/attendance/checkout'),
+  breakStart: () => api.post('/attendance/break/start'),
+  breakEnd: () => api.post('/attendance/break/end'),
   mark: (data) => api.post('/attendance', data),
   update: (id, data) => api.patch(`/attendance/${id}`, data),
 };

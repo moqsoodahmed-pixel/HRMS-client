@@ -68,7 +68,7 @@ export default function Settings() {
         </SettingsSection>
 
         <SettingsSection icon={Clock} title="Attendance" description="Work-hours window used for check-in lateness and hours worked. Leave blank to use the server default.">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <FormField label="Work Start Time" hint="24-hour HH:mm">
               <input type="time" className="input" value={active.attendance?.workStartTime || '10:30'} onChange={(e) => update('attendance', { workStartTime: e.target.value })} />
             </FormField>
@@ -77,6 +77,14 @@ export default function Settings() {
             </FormField>
             <FormField label="Late Threshold (minutes)" hint="Grace period before a check-in counts as late">
               <input type="number" min="0" max="120" className="input" value={active.attendance?.lateThresholdMinutes ?? ''} onChange={(e) => update('attendance', { lateThresholdMinutes: e.target.value })} />
+            </FormField>
+            <FormField label="Break Duration (minutes)" hint="Deducted from gross hours to give net working hours (default 60 min = 1 hr)">
+              <input
+                type="number" min="0" max="120" className="input"
+                placeholder="60"
+                value={active.attendance?.breakDurationMinutes ?? ''}
+                onChange={(e) => update('attendance', { breakDurationMinutes: e.target.value })}
+              />
             </FormField>
           </div>
           <SectionSaveButton onSave={() => submitSection('attendance')} disabled={!form?.attendance} loading={save.isPending} />

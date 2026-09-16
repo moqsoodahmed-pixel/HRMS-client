@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Clock, LogIn, LogOut, Users, UserCheck, UserX, CalendarOff, AlarmClock, Pencil, Plus, Download,
-  ClipboardList, Unlock, CalendarRange, Wallet, Timer, TrendingUp, FileEdit,
+  ClipboardList, Unlock, CalendarRange, Wallet, Timer, TrendingUp, FileEdit, Coffee,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { attendanceAPI, employeeAPI, attendanceRequestAPI, shiftAPI } from '../api/axios';
@@ -70,6 +70,16 @@ function MyAttendanceView() {
     onSuccess: () => { toast.success('Checked out'); refreshAll(); },
     onError: (err) => toast.error(errorMessage(err)),
   });
+  const breakStart = useMutation({
+    mutationFn: () => attendanceAPI.breakStart(),
+    onSuccess: () => { toast.success('Break started — enjoy your hour!'); refreshAll(); },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  const breakEnd = useMutation({
+    mutationFn: () => attendanceAPI.breakEnd(),
+    onSuccess: () => { toast.success('Break ended — welcome back!'); refreshAll(); },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
 
   return (
     <div>
@@ -91,25 +101,59 @@ function MyAttendanceView() {
               <div>
                 <p className="text-sm font-semibold text-gray-900">Today</p>
                 <p className="text-xs text-gray-500">Shift {myToday.shift?.start} – {myToday.shift?.end} · {formatDate(new Date())}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Includes 1 hr paid break · 8 hrs counted = 9 hrs on site</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
               <MiniStat label="Status" value={myToday.record ? <StatusBadge status={myToday.record.status} /> : <span className="text-sm text-gray-400">Not marked</span>} />
               <MiniStat label="Check in" value={<span className="text-sm font-medium">{formatTime(myToday.record?.checkIn)}</span>} />
               <MiniStat
                 label={myToday.record?.checkOut ? 'Check out' : 'Working'}
                 value={<span className="text-sm font-medium">{myToday.record?.checkOut ? formatTime(myToday.record.checkOut) : myToday.record?.checkIn ? duration(myToday.record.checkIn) : '—'}</span>}
               />
+              <MiniStat
+                label="Break"
+                value={
+                  myToday.record?.breakStart && myToday.record?.breakEnd
+                    ? <span className="text-sm font-medium text-green-600">{formatTime(myToday.record.breakStart)} – {formatTime(myToday.record.breakEnd)}</span>
+                    : myToday.record?.breakStart && !myToday.record?.breakEnd
+                    ? <span className="text-sm font-medium text-amber-600 animate-pulse">On break…</span>
+                    : <span className="text-sm text-gray-400">Not started</span>
+                }
+              />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button type="button" className="btn-primary" onClick={() => checkIn.mutate()} disabled={checkIn.isPending || Boolean(myToday.record?.checkIn)}>
                 <LogIn className="h-4 w-4" /> Check in
               </button>
+              {/* Break start — only after check-in, before check-out, and break not yet taken */}
+              {!myToday.record?.breakStart && myToday.record?.checkIn && !myToday.record?.checkOut && (
+                <button type="button" className="btn-secondary" onClick={() => breakStart.mutate()} disabled={breakStart.isPending}>
+                  <Coffee className="h-4 w-4" /> Start break
+                </button>
+              )}
+              {/* Break end — only while on break */}
+              {myToday.record?.breakStart && !myToday.record?.breakEnd && (
+                <button type="button" className="btn-secondary" onClick={() => breakEnd.mutate()} disabled={breakEnd.isPending}>
+                  <Coffee className="h-4 w-4" /> End break
+                </button>
+              )}
               <button type="button" className="btn-secondary" onClick={() => checkOut.mutate()} disabled={checkOut.isPending || !myToday.record?.checkIn || Boolean(myToday.record?.checkOut)}>
                 <LogOut className="h-4 w-4" /> Check out
               </button>
             </div>
           </div>
+
+          {/* Net hours info bar */}
+          {myToday.record?.checkIn && (
+            <div className="mt-4 rounded-lg bg-amber-50 border border-amber-100 px-4 py-2 text-xs text-amber-800 flex flex-wrap gap-x-6 gap-y-1">
+              <span>⏱ <strong>Gross time:</strong> {myToday.record?.checkOut ? `${myToday.record.workHours?.toFixed(2) ?? '—'} h` : duration(myToday.record.checkIn)}</span>
+              <span>☕ <strong>Break:</strong> 1 hr deducted</span>
+              {myToday.record?.netWorkHours != null && (
+                <span>✅ <strong>Net working hours:</strong> {myToday.record.netWorkHours.toFixed(2)} h (target: 8.00 h)</span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -130,7 +174,7 @@ function MyAttendanceView() {
             { key: 'date', header: 'Date', render: (r) => formatDate(r.date) },
             { key: 'checkIn', header: 'Check In', render: (r) => formatTime(r.checkIn) },
             { key: 'checkOut', header: 'Check Out', render: (r) => formatTime(r.checkOut) },
-            { key: 'hours', header: 'Hours', render: (r) => (r.workHours ? `${r.workHours.toFixed(2)} h` : '—') },
+            { key: 'hours', header: 'Net Hours (excl. break)', render: (r) => (r.netWorkHours != null ? `${r.netWorkHours.toFixed(2)} h` : r.workHours ? `${r.workHours.toFixed(2)} h` : '—') },
             { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
           ]}
           rows={records}
@@ -592,8 +636,12 @@ function AttendanceHistoryPanel() {
     { key: 'checkOut', header: 'Check Out', render: (row) => formatTime(row.checkOut) },
     {
       key: 'hours',
-      header: 'Working Hours',
-      render: (row) => (row.workHours ? `${row.workHours.toFixed(2)} h` : row.checkIn && !row.checkOut ? <span className="text-amber-600">In progress</span> : '—'),
+      header: 'Net Hours (excl. 1 hr break)',
+      render: (row) => {
+        if (row.checkIn && !row.checkOut) return <span className="text-amber-600">In progress</span>;
+        const net = row.netWorkHours ?? (row.workHours ? Math.max(0, row.workHours - 1) : null);
+        return net != null ? `${net.toFixed(2)} h` : '—';
+      },
     },
     { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
     ...(can('manageAttendance') ? [{
@@ -615,7 +663,11 @@ function AttendanceHistoryPanel() {
       { label: 'Date', value: (r) => formatDate(r.date) },
       { label: 'Check In', value: (r) => formatTime(r.checkIn, '') },
       { label: 'Check Out', value: (r) => formatTime(r.checkOut, '') },
-      { label: 'Working Hours', value: (r) => r.workHours ?? '' },
+      { label: 'Break Start', value: (r) => formatTime(r.breakStart, '') },
+      { label: 'Break End', value: (r) => formatTime(r.breakEnd, '') },
+      { label: 'Break (mins)', value: (r) => r.breakDurationMinutes ?? '' },
+      { label: 'Gross Hours', value: (r) => r.workHours ?? '' },
+      { label: 'Net Working Hours', value: (r) => r.netWorkHours ?? '' },
       { label: 'Status', value: (r) => r.status },
     ], records);
     toast.success('Exported the current page');
