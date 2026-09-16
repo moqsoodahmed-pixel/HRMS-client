@@ -12,6 +12,7 @@ const PERMISSIONS = {
   // Employees
   viewEmployees: ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
   manageEmployees: ['HR_ADMIN', 'PROJECT_HEAD'],
+  deleteEmployee: ['HR_ADMIN', 'PROJECT_HEAD'],
   revealIdentity: ['HR_ADMIN', 'PROJECT_HEAD'],
   // Attendance
   manageAttendance: ['HR_ADMIN'],

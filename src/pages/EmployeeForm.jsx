@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, FileText, Info, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Check, FileText, Info, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { employeeAPI } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +16,7 @@ const EMPTY_FORM = {
   designation: '', department: '', employmentType: 'FULL_TIME', status: 'ACTIVE', dateOfJoining: '', role: 'EMPLOYEE',
   probationEndDate: '', confirmationDate: '', dateOfExit: '', exitReason: '', noticePeriodDays: '',
   workLocation: '', dateOfBirth: '', gender: '', bloodGroup: '', nationality: 'Indian', manager: '',
+  password: '', confirmPassword: '',
 };
 
 const WIZARD_STEPS = [
@@ -38,6 +39,8 @@ export default function EmployeeForm() {
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   // The step wizard only applies to creating a new employee — editing an
   // existing record is a single flat form, not an onboarding walkthrough.
   const [step, setStep] = useState(1);
@@ -90,6 +93,12 @@ export default function EmployeeForm() {
     if (!form.firstName.trim()) next.firstName = 'First name is required.';
     if (!/^\S+@\S+\.\S+$/.test(form.officialEmail)) next.officialEmail = 'Enter a valid official email.';
     if (form.personalEmail && !/^\S+@\S+\.\S+$/.test(form.personalEmail)) next.personalEmail = 'Enter a valid email or leave it blank.';
+    if (!isEdit) {
+      if (!form.password) next.password = 'Password is required.';
+      else if (form.password.length < 8) next.password = 'Password must be at least 8 characters.';
+      if (!form.confirmPassword) next.confirmPassword = 'Please confirm the password.';
+      else if (form.password !== form.confirmPassword) next.confirmPassword = 'Passwords do not match.';
+    }
     return next;
   };
 
@@ -124,7 +133,8 @@ export default function EmployeeForm() {
       setStep(next.employeeCode || next.firstName || next.officialEmail || next.personalEmail ? 1 : 2);
       return;
     }
-    const payload = { ...form, fullName: `${form.firstName} ${form.lastName}`.trim() };
+    const { confirmPassword, ...rest } = form;
+    const payload = { ...rest, fullName: `${form.firstName} ${form.lastName}`.trim() };
     if (isEdit) updateMut.mutate(payload);
     else createMut.mutate(payload);
   };
@@ -194,6 +204,50 @@ export default function EmployeeForm() {
             <FormField label="Official Email" required error={errors.officialEmail}>
               <input type="email" className="input" value={form.officialEmail} onChange={(e) => set('officialEmail', e.target.value)} />
             </FormField>
+            {!isEdit && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="Password" required error={errors.password}>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      className="input pr-10"
+                      value={form.password}
+                      onChange={(e) => set('password', e.target.value)}
+                      placeholder="Min. 8 characters"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600"
+                      onClick={() => setShowPassword((v) => !v)}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </FormField>
+                <FormField label="Confirm Password" required error={errors.confirmPassword}>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      className="input pr-10"
+                      value={form.confirmPassword}
+                      onChange={(e) => set('confirmPassword', e.target.value)}
+                      placeholder="Re-enter password"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      tabIndex={-1}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </FormField>
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField label="Personal Email" error={errors.personalEmail}>
                 <input type="email" className="input" value={form.personalEmail} onChange={(e) => set('personalEmail', e.target.value)} />

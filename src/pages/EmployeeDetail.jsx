@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Edit, Archive, Plus, Download, Eye, CheckCircle2, Clock, Calendar,
-  Wallet, UserPlus, UserMinus, KeyRound, ShieldQuestion, ClipboardCheck, AlertTriangle, FileEdit,
+  Wallet, UserPlus, UserMinus, KeyRound, ShieldQuestion, ClipboardCheck, AlertTriangle, FileEdit, Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { employeeAPI, documentAPI, editRequestAPI } from '../api/axios';
@@ -26,6 +26,7 @@ export default function EmployeeDetail() {
   const [tab, setTab] = useState(searchParams.get('tab') || 'overview');
   const [showUpload, setShowUpload] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const [rejectingDoc, setRejectingDoc] = useState(null);
   const [uploadCategory, setUploadCategory] = useState('');
   const [requestingChanges, setRequestingChanges] = useState(false);
@@ -61,6 +62,16 @@ export default function EmployeeDetail() {
       navigate('/employees');
     },
     onError: (err) => { toast.error(errorMessage(err, 'Could not archive this employee.')); setShowArchive(false); },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: () => employeeAPI.delete(id),
+    onSuccess: () => {
+      toast.success('Employee permanently deleted');
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      navigate('/employees');
+    },
+    onError: (err) => { toast.error(errorMessage(err, 'Could not delete this employee.')); setShowDelete(false); },
   });
 
   const invalidateDocs = () => {
@@ -143,6 +154,14 @@ export default function EmployeeDetail() {
           <div className="flex gap-2">
             <Link to={`/employees/${id}/edit`} className="btn-secondary"><Edit className="h-4 w-4" /> Edit</Link>
             <button type="button" className="btn-danger" onClick={() => setShowArchive(true)}><Archive className="h-4 w-4" /> Archive</button>
+            {can('deleteEmployee') && (
+              <button type="button" className="btn-danger" onClick={() => setShowDelete(true)}><Trash2 className="h-4 w-4" /> Delete</button>
+            )}
+          </div>
+        )}
+        {can('manageEmployees') && emp.isArchived && can('deleteEmployee') && (
+          <div className="flex gap-2">
+            <button type="button" className="btn-danger" onClick={() => setShowDelete(true)}><Trash2 className="h-4 w-4" /> Delete</button>
           </div>
         )}
         {!can('manageEmployees') && user?.role === 'EMPLOYEE' && ownEmployee?._id === id && (
@@ -284,6 +303,16 @@ export default function EmployeeDetail() {
         title="Archive Employee"
         message={`Archive ${emp.fullName}? Their account will be disabled and they will not be able to log in.`}
         confirmLabel="Archive"
+      />
+
+      <ConfirmDialog
+        open={showDelete}
+        onClose={() => setShowDelete(false)}
+        onConfirm={() => deleteMut.mutate()}
+        loading={deleteMut.isPending}
+        title="Permanently Delete Employee"
+        message={`This will permanently delete ${emp.fullName} and their login account. This cannot be undone. Are you sure?`}
+        confirmLabel="Delete Permanently"
       />
 
       <RejectDocModal doc={rejectingDoc} onClose={() => setRejectingDoc(null)} onSubmit={(reason) => rejectMut.mutate({ docId: rejectingDoc._id, reason })} loading={rejectMut.isPending} />
