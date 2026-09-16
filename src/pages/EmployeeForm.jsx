@@ -40,6 +40,11 @@ export default function EmployeeForm() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword2, setShowConfirmPassword2] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showNewConfirmPassword, setShowNewConfirmPassword] = useState(false);
+  const [pwForm, setPwForm] = useState({ newPassword: '', confirmNewPassword: '' });
+  const [pwErrors, setPwErrors] = useState({});
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   // The step wizard only applies to creating a new employee — editing an
   // existing record is a single flat form, not an onboarding walkthrough.
@@ -83,6 +88,30 @@ export default function EmployeeForm() {
     },
     onError: (err) => { setErrors(fieldErrors(err)); toast.error(errorMessage(err, 'Could not update the employee.')); },
   });
+
+  const canChangePassword = isElevated || user?.role === 'HR_ADMIN' || user?.role === 'PROJECT_HEAD';
+
+  const changePasswordMut = useMutation({
+    mutationFn: (payload) => employeeAPI.changePassword(id, payload),
+    onSuccess: () => {
+      toast.success('Password updated successfully');
+      setPwForm({ newPassword: '', confirmNewPassword: '' });
+      setPwErrors({});
+    },
+    onError: (err) => { toast.error(errorMessage(err, 'Could not update password.')); },
+  });
+
+  const handlePasswordChange = (e) => {
+    e.preventDefault();
+    const next = {};
+    if (!pwForm.newPassword) next.newPassword = 'New password is required.';
+    else if (pwForm.newPassword.length < 8) next.newPassword = 'Password must be at least 8 characters.';
+    if (!pwForm.confirmNewPassword) next.confirmNewPassword = 'Please confirm the password.';
+    else if (pwForm.newPassword !== pwForm.confirmNewPassword) next.confirmNewPassword = 'Passwords do not match.';
+    setPwErrors(next);
+    if (Object.keys(next).length) return;
+    changePasswordMut.mutate({ newPassword: pwForm.newPassword });
+  };
 
   const saving = createMut.isPending || updateMut.isPending;
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
@@ -419,6 +448,50 @@ export default function EmployeeForm() {
             <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Employee documentation: 0/{requiredCount} complete — required documents remaining: {requiredCount}.
               You will upload these right after creating the employee.
+            </div>
+          </div>
+        )}
+
+        {isEdit && canChangePassword && (
+          <div className="card space-y-4 p-5">
+            <h3 className="section-title">Change Password</h3>
+            <p className="text-sm text-gray-500">Set a new login password for this employee.</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="New Password" required error={pwErrors.newPassword}>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    className="input pr-10"
+                    value={pwForm.newPassword}
+                    onChange={(e) => setPwForm((p) => ({ ...p, newPassword: e.target.value }))}
+                    placeholder="Min. 8 characters"
+                    autoComplete="new-password"
+                  />
+                  <button type="button" className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600" onClick={() => setShowNewPassword((v) => !v)} tabIndex={-1}>
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </FormField>
+              <FormField label="Confirm New Password" required error={pwErrors.confirmNewPassword}>
+                <div className="relative">
+                  <input
+                    type={showNewConfirmPassword ? 'text' : 'password'}
+                    className="input pr-10"
+                    value={pwForm.confirmNewPassword}
+                    onChange={(e) => setPwForm((p) => ({ ...p, confirmNewPassword: e.target.value }))}
+                    placeholder="Re-enter new password"
+                    autoComplete="new-password"
+                  />
+                  <button type="button" className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600" onClick={() => setShowNewConfirmPassword((v) => !v)} tabIndex={-1}>
+                    {showNewConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </FormField>
+            </div>
+            <div className="flex justify-end">
+              <button type="button" className="btn-primary" onClick={handlePasswordChange} disabled={changePasswordMut.isPending}>
+                {changePasswordMut.isPending ? 'Updating…' : 'Update Password'}
+              </button>
             </div>
           </div>
         )}

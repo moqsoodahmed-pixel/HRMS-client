@@ -76,6 +76,7 @@ export const employeeAPI = {
   update: (id, data) => api.patch(`/employees/${id}`, data),
   archive: (id) => api.post(`/employees/${id}/archive`),
   delete: (id) => api.delete(`/employees/${id}`),
+  changePassword: (id, data) => api.patch(`/employees/${id}/password`, data),
   options: () => api.get('/employees/options'),
   uploadPhoto: (id, formData) => api.post(`/employees/${id}/photo`, formData),
   import: (rows) => api.post('/employees/import', { rows }),
