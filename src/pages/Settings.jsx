@@ -151,6 +151,43 @@ export default function Settings() {
           </div>
         </SettingsSection>
 
+        <SettingsSection icon={Send} title="Daily Report Telegram Notifications" description="Send daily report submissions to a separate, dedicated Telegram bot/group. Get your Bot Token from @BotFather and your Chat ID from @userinfobot.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Bot Token" hint="From @BotFather — leave blank to keep existing value">
+              <input
+                className="input font-mono text-sm"
+                value={active.dailyReportTelegram?.botToken || ''}
+                onChange={(e) => update('dailyReportTelegram', { botToken: e.target.value })}
+                placeholder="1234567890:AAF..."
+                autoComplete="off"
+              />
+            </FormField>
+            <FormField label="Group / Chat ID" hint="From @userinfobot or the group chat info">
+              <input
+                className="input font-mono text-sm"
+                value={active.dailyReportTelegram?.notifyChatId || ''}
+                onChange={(e) => update('dailyReportTelegram', { notifyChatId: e.target.value })}
+                placeholder="-1001234567890"
+              />
+            </FormField>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-6">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-primary-600"
+                checked={active.dailyReportTelegram?.enabled ?? false}
+                onChange={(e) => update('dailyReportTelegram', { enabled: e.target.checked })}
+              />
+              Enable daily report notifications
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <DailyReportTelegramTestButton />
+            <SectionSaveButton onSave={() => submitSection('dailyReportTelegram')} disabled={!form?.dailyReportTelegram} loading={save.isPending} />
+          </div>
+        </SettingsSection>
+
         <SettingsSection icon={ShieldCheck} title="Security" description="Current account-security policy (read-only — not database-configurable in this build).">
           <ul className="space-y-2 text-sm text-gray-700">
             <li className="flex items-center gap-2"><Lock className="h-3.5 w-3.5 text-gray-400" /> Account lockout after 5 failed login attempts, for 30 minutes.</li>
@@ -208,6 +245,26 @@ function TelegramTestButton() {
     try {
       await settingsAPI.telegramTest();
       toast.success('Test message sent! Check your Telegram group.');
+    } catch (err) {
+      toast.error('Failed: ' + errorMessage(err));
+    } finally {
+      setTesting(false);
+    }
+  };
+  return (
+    <button type="button" className="btn-secondary flex items-center gap-2" onClick={handleTest} disabled={testing}>
+      <Send className="h-4 w-4" /> {testing ? 'Sending…' : 'Send test message'}
+    </button>
+  );
+}
+
+function DailyReportTelegramTestButton() {
+  const [testing, setTesting] = useState(false);
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      await settingsAPI.dailyReportTelegramTest();
+      toast.success('Test message sent! Check your daily-report Telegram group.');
     } catch (err) {
       toast.error('Failed: ' + errorMessage(err));
     } finally {

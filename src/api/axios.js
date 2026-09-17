@@ -291,6 +291,7 @@ export const settingsAPI = {
   get: () => api.get('/settings'),
   update: (data) => api.patch('/settings', data),
   telegramTest: () => api.post('/settings/telegram/test'),
+  dailyReportTelegramTest: () => api.post('/settings/telegram/test-daily-report'),
 };
 
 export const offboardingAPI = {
