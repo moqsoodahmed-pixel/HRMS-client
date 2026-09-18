@@ -29,6 +29,13 @@ export default function Documents() {
   const stats = statsQuery.data?.data?.data;
 
   const activeEmployee = canManage ? selected : ownEmployee;
+  // Anyone may upload documents to their OWN record — the backend already
+  // allows this for every role (see documentController's assertCanAccessEmployee,
+  // which always permits self-access regardless of role). Only the
+  // review actions (Verify/Reject/Archive) stay restricted to canManage
+  // (HR_ADMIN), further down in EmployeeDocumentPane.
+  const isOwnRecord = Boolean(activeEmployee?._id) && activeEmployee._id === ownEmployee?._id;
+  const canUpload = canManage || isOwnRecord;
 
   return (
     <div>
@@ -51,7 +58,7 @@ export default function Documents() {
           {!activeEmployee ? (
             <div className="card"><EmptyState icon={Users} title="Select an employee" description="Choose an employee on the left to manage their documents." /></div>
           ) : (
-            <EmployeeDocumentPane employee={activeEmployee} canManage={canManage} />
+            <EmployeeDocumentPane employee={activeEmployee} canManage={canManage} canUpload={canUpload} />
           )}
         </div>
       </div>
@@ -113,7 +120,7 @@ function EmployeeListPane({ selected, onSelect }) {
 /* Right pane — document management for one employee                   */
 /* ------------------------------------------------------------------ */
 
-function EmployeeDocumentPane({ employee, canManage }) {
+function EmployeeDocumentPane({ employee, canManage, canUpload }) {
   const queryClient = useQueryClient();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [rejecting, setRejecting] = useState(null);
@@ -178,7 +185,7 @@ function EmployeeDocumentPane({ employee, canManage }) {
             <p className="text-xs text-gray-400">{employee.employeeCode} · {employee.department}</p>
           </div>
         </div>
-        {canManage && (
+        {canUpload && (
           <button type="button" className="btn-primary" onClick={() => setUploadOpen(true)}>
             <Upload className="h-4 w-4" /> Upload document
           </button>
@@ -271,8 +278,8 @@ function EmployeeDocumentPane({ employee, canManage }) {
             <EmptyState
               icon={FileText}
               title="No documents found"
-              description={canManage ? 'Upload a document for this employee to get started.' : 'No documents have been filed against your profile yet.'}
-              action={canManage ? <button type="button" className="btn-primary" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> Upload document</button> : null}
+              description={canUpload ? 'Upload a document for this employee to get started.' : 'No documents have been filed against your profile yet.'}
+              action={canUpload ? <button type="button" className="btn-primary" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> Upload document</button> : null}
             />
           }
         />
