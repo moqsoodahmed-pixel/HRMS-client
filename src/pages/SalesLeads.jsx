@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Phone, Mail, Building2, Upload, Search, RefreshCw, ChevronLeft, ChevronRight,
   BarChart3, Users, TrendingUp, Eye, Edit2, RotateCcw, AlertCircle, CheckCircle2,
-  Filter, X, Info,
+  Filter, X, Info, Calendar,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { leadsAPI, employeeAPI } from '../api/axios';
@@ -456,6 +456,147 @@ function LeadHistoryModal({ leadId, onClose }) {
   );
 }
 
+// ── Mini Calendar Component ──────────────────────────────────────────────────
+function MiniCalendar({ selectedDate, onSelectDate, onClose }) {
+  const [viewDate, setViewDate] = useState(() => {
+    if (selectedDate) {
+      const parts = selectedDate.split('-');
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+    }
+    return new Date();
+  });
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const prevMonth = (e) => {
+    e.stopPropagation();
+    setViewDate(new Date(year, month - 1, 1));
+  };
+
+  const nextMonth = (e) => {
+    e.stopPropagation();
+    setViewDate(new Date(year, month + 1, 1));
+  };
+
+  // Calendar math
+  const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0 = Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const days = [];
+  for (let i = 0; i < firstDayOfWeek; i++) {
+    days.push(null);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    days.push({ day: d, dateStr: dStr });
+  }
+
+  return (
+    <div
+      className="absolute top-full left-0 sm:right-0 sm:left-auto mt-2 z-50 w-64 rounded-xl border border-gray-200 bg-white p-3 shadow-xl ring-1 ring-black/5"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <button
+          type="button"
+          onClick={prevMonth}
+          className="p-1 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+          title="Previous month"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <span className="text-xs font-semibold text-gray-800">
+          {monthNames[month]} {year}
+        </span>
+        <button
+          type="button"
+          onClick={nextMonth}
+          className="p-1 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+          title="Next month"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 gap-1 text-center mb-1">
+        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((w) => (
+          <span key={w} className="text-[11px] font-medium text-gray-400">
+            {w}
+          </span>
+        ))}
+      </div>
+
+      {/* Days grid */}
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {days.map((item, idx) => {
+          if (!item) {
+            return <div key={`empty-${idx}`} className="h-7 w-7" />;
+          }
+          const isSelected = selectedDate === item.dateStr;
+          const isToday = todayStr === item.dateStr;
+
+          return (
+            <button
+              key={item.dateStr}
+              type="button"
+              onClick={() => {
+                onSelectDate(item.dateStr);
+                onClose();
+              }}
+              className={`h-7 w-7 rounded-full text-xs font-medium flex items-center justify-center transition-all ${
+                isSelected
+                  ? 'bg-primary-600 text-white font-semibold shadow-sm'
+                  : isToday
+                  ? 'border border-primary-500 text-primary-600 hover:bg-primary-50'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              {item.day}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Footer / Quick actions */}
+      <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+        <button
+          type="button"
+          onClick={() => {
+            onSelectDate(todayStr);
+            onClose();
+          }}
+          className="text-primary-600 font-medium hover:underline"
+        >
+          Today
+        </button>
+        {selectedDate && (
+          <button
+            type="button"
+            onClick={() => {
+              onSelectDate('');
+              onClose();
+            }}
+            className="text-gray-500 hover:text-red-600 hover:underline"
+          >
+            Clear Date
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function SalesLeads() {
   const { user, isElevated } = useAuth();
@@ -504,12 +645,31 @@ export default function SalesLeads() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [leadDateFilter, setLeadDateFilter] = useState(''); // '' (All Leads) | 'TODAY' | 'PREVIOUS'
+  const [customDate, setCustomDate] = useState(''); // YYYY-MM-DD
+  const [showCalendar, setShowCalendar] = useState(false);
+  const calendarRef = useRef(null);
   const [batchFilter, setBatchFilter] = useState('');
   const [batches, setBatches] = useState([]);
   const [activeTab, setActiveTab] = useState('leads'); // leads | stats
   const [statusModal, setStatusModal] = useState(null);
   const [reassignModal, setReassignModal] = useState(null);
   const [historyModal, setHistoryModal] = useState(null);
+
+  // Close calendar popover on outside click
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+        setShowCalendar(false);
+      }
+    }
+    if (showCalendar) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCalendar]);
 
   const LIMIT = 50;
   const totalPages = Math.ceil(total / LIMIT);
@@ -520,6 +680,11 @@ export default function SalesLeads() {
       const params = { page, limit: LIMIT };
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
+      if (customDate) {
+        params.leadDate = customDate;
+      } else if (leadDateFilter) {
+        params.leadDate = leadDateFilter;
+      }
       if (batchFilter) params.uploadBatch = batchFilter;
       const res = await leadsAPI.list(params);
       setLeads(res.data.data || []);
@@ -529,7 +694,7 @@ export default function SalesLeads() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, batchFilter]);
+  }, [page, search, statusFilter, leadDateFilter, customDate, batchFilter]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
@@ -588,6 +753,71 @@ export default function SalesLeads() {
               <option value="">All Statuses</option>
               {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
             </select>
+            <div className="flex items-center gap-1">
+              <select
+                aria-label="Lead Date Filter"
+                className="form-input w-40"
+                value={customDate ? 'CUSTOM' : leadDateFilter}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val === 'CUSTOM') {
+                    setShowCalendar(true);
+                  } else {
+                    setCustomDate('');
+                    setLeadDateFilter(val);
+                    setPage(1);
+                  }
+                }}
+              >
+                <option value="">All Leads</option>
+                <option value="TODAY">Today's Leads</option>
+                <option value="PREVIOUS">Previous Leads</option>
+                {customDate && (
+                  <option value="CUSTOM">{customDate}</option>
+                )}
+              </select>
+
+              {/* Calendar Trigger */}
+              <div className="relative" ref={calendarRef}>
+                <button
+                  type="button"
+                  aria-label="Calendar Lead Filter"
+                  onClick={() => setShowCalendar(prev => !prev)}
+                  className={`btn-secondary !p-2 transition-colors ${
+                    customDate ? 'border-primary-500 text-primary-600 bg-primary-50' : 'text-gray-600'
+                  }`}
+                  title={customDate ? `Filtered by ${customDate} (click to change)` : "Select date from calendar"}
+                >
+                  <Calendar className="h-4 w-4" />
+                </button>
+
+                {showCalendar && (
+                  <MiniCalendar
+                    selectedDate={customDate}
+                    onSelectDate={(d) => {
+                      setCustomDate(d);
+                      if (d) setLeadDateFilter('');
+                      setPage(1);
+                    }}
+                    onClose={() => setShowCalendar(false)}
+                  />
+                )}
+              </div>
+
+              {customDate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomDate('');
+                    setPage(1);
+                  }}
+                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Clear date filter"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
             {canUpload && batches.length > 0 && (
               <select className="form-input w-52" value={batchFilter} onChange={e => { setBatchFilter(e.target.value); setPage(1); }}>
                 <option value="">All Batches</option>
