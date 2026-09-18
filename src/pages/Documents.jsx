@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   FileText, Upload, Download, Eye, CheckCircle2, XCircle, Archive, FileCheck, FileClock, FileX,
@@ -50,7 +50,7 @@ export default function Documents() {
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[20rem_1fr]">
+      <div className={`mt-6 grid grid-cols-1 gap-6 ${canManage ? 'lg:grid-cols-[20rem_1fr]' : ''}`}>
         {canManage && (
           <EmployeeListPane selected={selected} onSelect={setSelected} />
         )}
@@ -122,7 +122,7 @@ function EmployeeListPane({ selected, onSelect }) {
 
 function EmployeeDocumentPane({ employee, canManage, canUpload }) {
   const queryClient = useQueryClient();
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFor, setUploadFor] = useState(null); // checklist item being uploaded for, or null
   const [rejecting, setRejecting] = useState(null);
   const [archiving, setArchiving] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
@@ -185,26 +185,35 @@ function EmployeeDocumentPane({ employee, canManage, canUpload }) {
             <p className="text-xs text-gray-400">{employee.employeeCode} · {employee.department}</p>
           </div>
         </div>
-        {canUpload && (
-          <button type="button" className="btn-primary" onClick={() => setUploadOpen(true)}>
-            <Upload className="h-4 w-4" /> Upload document
-          </button>
-        )}
       </div>
 
       {checklistQuery.isLoading ? <LoadingBlock label="Loading checklist…" /> : checklist && (
         <div className="card p-5">
           <h3 className="section-title mb-3">Required documents</h3>
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {checklist.items.map((item) => (
-              <li key={item.category} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate text-gray-700">{item.label}</p>
-                  <p className="text-[11px] text-gray-400">{documentCategoryGroup(item.category)}{item.required ? '' : ' · Optional'}</p>
-                </div>
-                <StatusBadge status={item.status} />
-              </li>
-            ))}
+            {checklist.items.map((item) => {
+              const needsUpload = item.status === 'MISSING' || item.status === 'REJECTED';
+              return (
+                <li key={item.category} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate text-gray-700">{item.label}</p>
+                    <p className="text-[11px] text-gray-400">{documentCategoryGroup(item.category)}{item.required ? '' : ' · Optional'}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <StatusBadge status={item.status} />
+                    {canUpload && needsUpload && (
+                      <button
+                        type="button"
+                        onClick={() => setUploadFor(item)}
+                        className="flex items-center gap-1 whitespace-nowrap text-xs font-medium text-primary-600 hover:underline"
+                      >
+                        <Upload className="h-3.5 w-3.5" /> Upload
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -278,14 +287,13 @@ function EmployeeDocumentPane({ employee, canManage, canUpload }) {
             <EmptyState
               icon={FileText}
               title="No documents found"
-              description={canUpload ? 'Upload a document for this employee to get started.' : 'No documents have been filed against your profile yet.'}
-              action={canUpload ? <button type="button" className="btn-primary" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> Upload document</button> : null}
+              description={canUpload ? 'Use the Upload button on any missing item above to get started.' : 'No documents have been filed against your profile yet.'}
             />
           }
         />
       </div>
 
-      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} employee={employee} onSaved={refresh} />
+      <UploadModal open={Boolean(uploadFor)} onClose={() => setUploadFor(null)} employee={employee} initialItem={uploadFor} onSaved={refresh} />
 
       <RejectDocumentModal doc={rejecting} onClose={() => setRejecting(null)} loading={reject.isPending} onSubmit={(reason) => reject.mutate({ id: rejecting._id, reason })} />
 
@@ -302,12 +310,23 @@ function EmployeeDocumentPane({ employee, canManage, canUpload }) {
   );
 }
 
-function UploadModal({ open, onClose, employee, onSaved }) {
+function UploadModal({ open, onClose, employee, initialItem, onSaved }) {
   const empty = { name: '', category: '', issueDate: '', expiryDate: '', notes: '' };
   const [form, setForm] = useState(empty);
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState({});
   const [progress, setProgress] = useState(0);
+
+  // Pre-fill (and lock) name + type when opened from a specific missing/rejected
+  // checklist item, so uploading "PAN Card" always lands in the right slot.
+  useEffect(() => {
+    if (open && initialItem) {
+      setForm({ ...empty, name: initialItem.label, category: initialItem.category });
+    } else if (open) {
+      setForm(empty);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialItem]);
 
   const upload = useMutation({
     mutationFn: (formData) => documentAPI.upload(formData, (e) => {
@@ -339,7 +358,12 @@ function UploadModal({ open, onClose, employee, onSaved }) {
   };
 
   return (
-    <Modal open={open} onClose={close} title="Upload document" description={`For ${employee?.fullName || ''} — PDF, image, Word or spreadsheet files up to 10 MB.`}>
+    <Modal
+      open={open}
+      onClose={close}
+      title={initialItem ? `Upload ${initialItem.label}` : 'Upload document'}
+      description={`For ${employee?.fullName || ''} — PDF, image, Word or spreadsheet files up to 10 MB.`}
+    >
       <form onSubmit={submit} className="space-y-4 p-5">
         <FormField label="File" required>
           <FileUpload file={file} onChange={setFile} error={errors.file} progress={progress} />
@@ -347,10 +371,10 @@ function UploadModal({ open, onClose, employee, onSaved }) {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Document name" required error={errors.name}>
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. PAN Card" />
+            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. PAN Card" readOnly={Boolean(initialItem)} />
           </FormField>
           <FormField label="Document type" required error={errors.category}>
-            <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={DOCUMENT_CATEGORIES} placeholder="Select a type" />
+            <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={DOCUMENT_CATEGORIES} placeholder="Select a type" disabled={Boolean(initialItem)} />
           </FormField>
         </div>
 
