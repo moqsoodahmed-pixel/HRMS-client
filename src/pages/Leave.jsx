@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   CalendarDays, CalendarPlus, Check, X, Ban, Wallet, Clock, CheckCircle2, XCircle, Plus, PartyPopper,
-  ChevronLeft, ChevronRight, Edit,
+  ChevronLeft, ChevronRight, Edit, FileText,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { leaveAPI, employeeAPI } from '../api/axios';
@@ -275,6 +275,8 @@ export function LeaveRequests() {
         footer={<Pagination page={meta?.page || 1} totalPages={meta?.totalPages} total={meta?.total} limit={PAGE_SIZE} onChange={setPage} />}
       />
 
+      <CompanyLeavePolicy />
+
       <ApplyLeaveModal open={applyOpen} onClose={() => setApplyOpen(false)} leaveTypes={leaveTypes} onSaved={refresh} />
 
       <RejectModal
@@ -293,6 +295,90 @@ export function LeaveRequests() {
         message={cancelling ? `Cancel the ${cancelling.leaveType?.name || 'leave'} request from ${formatDate(cancelling.startDate)} to ${formatDate(cancelling.endDate)}? This cannot be undone.` : ''}
         confirmLabel="Cancel request"
       />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+function CompanyLeavePolicy() {
+  return (
+    <div className="card mt-6 p-6">
+      <div className="flex items-start gap-3 border-b border-gray-100 pb-4">
+        <div className="rounded-lg bg-primary-50 p-2 text-primary-600">
+          <FileText className="h-5 w-5" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-gray-900">Company Leave Policy</h3>
+          <p className="mt-1 text-sm text-gray-600">
+            To ensure consistency and transparency in leave management, all employees are required to adhere to the following leave policy.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-6 text-sm text-gray-700">
+        {/* 1. Intern Leave Policy */}
+        <div>
+          <h4 className="font-semibold text-gray-900">1. Intern Leave Policy</h4>
+          <ul className="mt-2 space-y-2 pl-4 text-gray-600">
+            <li className="list-disc">
+              Interns are eligible to earn <strong className="font-semibold text-gray-900">one (1) paid leave credit per calendar month</strong>.
+            </li>
+            <li className="list-disc">
+              Any unused paid leave credit will be automatically <strong className="font-semibold text-gray-900">carried forward</strong> to the subsequent month.
+            </li>
+            <li className="list-disc">
+              Interns may avail a maximum of <strong className="font-semibold text-gray-900">two (2) paid leave days</strong> in a calendar month, subject to sufficient accumulated leave balance.
+            </li>
+            <li className="list-disc">
+              Any leave exceeding <strong className="font-semibold text-gray-900">two (2) days</strong> in a calendar month shall be treated as <strong className="font-semibold text-gray-900">Leave Without Pay (LWP)</strong>. Salary deductions will be calculated on a <strong className="font-semibold text-gray-900">per-day basis</strong> in accordance with the Company&apos;s payroll and salary policy.
+            </li>
+          </ul>
+        </div>
+
+        <hr className="border-gray-200" />
+
+        {/* 2. Employee Leave Policy */}
+        <div>
+          <h4 className="font-semibold text-gray-900">2. Employee Leave Policy</h4>
+          <ul className="mt-2 space-y-2 pl-4 text-gray-600">
+            <li className="list-disc">
+              Confirmed employees are eligible to earn <strong className="font-semibold text-gray-900">two (2) paid leave credits per calendar month</strong>.
+            </li>
+            <li className="list-disc">
+              Any unused paid leave credits will be automatically <strong className="font-semibold text-gray-900">carried forward</strong> to the subsequent month.
+            </li>
+            <li className="list-disc">
+              Employees may avail a maximum of <strong className="font-semibold text-gray-900">three (3) paid leave days</strong> in a calendar month, subject to sufficient accumulated leave balance.
+            </li>
+            <li className="list-disc">
+              Any leave exceeding <strong className="font-semibold text-gray-900">three (3) days</strong> in a calendar month shall be treated as <strong className="font-semibold text-gray-900">Leave Without Pay (LWP)</strong>. Salary deductions will be calculated on a <strong className="font-semibold text-gray-900">per-day basis</strong> in accordance with the Company&apos;s payroll and salary policy.
+            </li>
+          </ul>
+        </div>
+
+        <hr className="border-gray-200" />
+
+        {/* 3. General Conditions */}
+        <div>
+          <h4 className="font-semibold text-gray-900">3. General Conditions</h4>
+          <ul className="mt-2 space-y-2 pl-4 text-gray-600">
+            <li className="list-disc">
+              All leave requests are subject to approval by the respective Reporting Manager or the designated Approving Authority.
+            </li>
+            <li className="list-disc">
+              Leave balances are updated automatically based on approved leave records maintained within the HRMS.
+            </li>
+            <li className="list-disc">
+              The Company reserves the right to interpret, amend, or revise this policy in accordance with business requirements and applicable employment regulations.
+            </li>
+          </ul>
+        </div>
+
+        <div className="rounded-lg bg-gray-50 p-3.5 text-xs text-gray-500 border border-gray-100">
+          <strong className="font-semibold text-gray-700">Note:</strong> This section is for employee guidance only and does not alter the existing leave approval process, leave calculations, payroll logic, or application workflow. In the event of any discrepancy, the official HR Policy issued by the Company shall prevail.
+        </div>
+      </div>
     </div>
   );
 }
