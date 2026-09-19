@@ -180,8 +180,10 @@ export const documentAPI = {
   upload: (formData, onUploadProgress) =>
     api.post('/documents/upload', formData, { onUploadProgress }),
   download: (id) => api.get(`/documents/${id}/download?dl=1`, { responseType: 'blob' }),
-  /** Direct URL for opening a document inline — the auth cookie travels with it. */
-  viewUrl: (id) => `/api/documents/${id}/download`,
+  /** Fetches document as blob for in-browser viewing */
+  view: (id) => api.get(`/documents/${id}/download`, { responseType: 'blob' }),
+  /** Direct URL for opening a document inline */
+  viewUrl: (id) => `${import.meta.env.VITE_API_URL || '/api'}/documents/${id}/download`,
   verify: (id) => api.patch(`/documents/${id}/verify`),
   reject: (id, reason) => api.patch(`/documents/${id}/reject`, { reason }),
   archive: (id) => api.patch(`/documents/${id}/archive`),
@@ -258,7 +260,8 @@ export const trainingAPI = {
   assignees: (id) => api.get(`/training/${id}/assignees`),
   myAssignments: () => api.get('/training/assignments/me'),
   updateMyAssignment: (id, status) => api.patch(`/training/assignments/me/${id}`, { status }),
-  downloadUrl: (id) => `/api/training/${id}/download`,
+  download: (id) => api.get(`/training/${id}/download`, { responseType: 'blob' }),
+  downloadUrl: (id) => `${import.meta.env.VITE_API_URL || '/api'}/training/${id}/download`,
 };
 
 /** Performance reviews — new, minimal (see server/controllers/performanceController.js). */

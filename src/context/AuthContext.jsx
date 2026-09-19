@@ -18,7 +18,7 @@ const PERMISSIONS = {
   manageAttendance: ['HR_ADMIN'],
   viewAllAttendance: ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
   // Leave
-  approveLeave: ['HR_ADMIN', ...TEAM_SCOPED_ROLES],
+  approveLeave: ['FOUNDER_CEO', 'SUPER_ADMIN', 'CTO', 'HR_ADMIN', ...TEAM_SCOPED_ROLES],
   manageLeaveSettings: ['HR_ADMIN'],
   applyLeave: ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
   viewTeamFilters: ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],

@@ -15,6 +15,11 @@ import {
 import { LEAVE_STATUSES, DEPARTMENTS, HOLIDAY_TYPES } from '../constants';
 import { formatDate, daysBetween, errorMessage, fieldErrors, toDateInput } from '../lib/format';
 
+const LEAVE_SUBTYPES = {
+  CASUAL: ['Sick Leave', 'Personal Emergency Leave'],
+  ANNUAL: ['Exam', 'Planning Trip', 'Medical', 'Festival', 'Anniversary', 'Birthday', 'Others'],
+};
+
 const PAGE_SIZE = 20;
 
 export default function Leave() {
@@ -135,7 +140,18 @@ export function LeaveRequests() {
         </div>
       ),
     },
-    { key: 'type', header: 'Leave Type', render: (row) => row.leaveType?.name || '—' },
+    {
+      key: 'type',
+      header: 'Leave Type',
+      render: (row) => (
+        <div>
+          <span className="font-medium text-gray-900">{row.leaveType?.name || '—'}</span>
+          {row.subType && (
+            <span className="block text-xs font-medium text-primary-600">{row.subType}</span>
+          )}
+        </div>
+      ),
+    },
     { key: 'start', header: 'Start', render: (row) => formatDate(row.startDate) },
     { key: 'end', header: 'End', render: (row) => formatDate(row.endDate) },
     { key: 'days', header: 'Days', render: (row) => <span className="font-medium">{row.totalDays}{row.isHalfDay ? ' (half)' : ''}</span> },
@@ -285,7 +301,7 @@ export function LeaveRequests() {
 
 function ApplyLeaveModal({ open, onClose, leaveTypes, onSaved }) {
   const { can } = useAuth();
-  const empty = { leaveType: '', startDate: '', endDate: '', reason: '', isHalfDay: false, halfDayType: 'FIRST_HALF', employee: '' };
+  const empty = { leaveType: '', subType: '', startDate: '', endDate: '', reason: '', isHalfDay: false, halfDayType: 'FIRST_HALF', employee: '' };
   const [form, setForm] = useState(empty);
   const [errors, setErrors] = useState({});
 
@@ -305,6 +321,18 @@ function ApplyLeaveModal({ open, onClose, leaveTypes, onSaved }) {
   const myBalances = balances.data?.data?.data || [];
   const selectedBalance = myBalances.find((b) => b.leaveType?._id === form.leaveType);
 
+  const selectedTypeObj = leaveTypes.find((t) => t._id === form.leaveType);
+  const selectedCategory = selectedTypeObj
+    ? (selectedTypeObj.code?.toUpperCase() === 'CASUAL' || selectedTypeObj.name?.toLowerCase().includes('casual')
+        ? 'CASUAL'
+        : selectedTypeObj.code?.toUpperCase() === 'ANNUAL' || selectedTypeObj.name?.toLowerCase().includes('annual')
+          ? 'ANNUAL'
+          : null)
+    : null;
+
+  const availableSubTypes = selectedCategory ? (LEAVE_SUBTYPES[selectedCategory] || []) : [];
+  const isReasonMandatory = form.subType === 'Others';
+
   const days = form.isHalfDay ? 0.5 : daysBetween(form.startDate, form.endDate);
 
   const save = useMutation({
@@ -319,22 +347,34 @@ function ApplyLeaveModal({ open, onClose, leaveTypes, onSaved }) {
     e.preventDefault();
     const next = {};
     if (!form.leaveType) next.leaveType = 'Choose a leave type.';
+    if (availableSubTypes.length > 0 && !form.subType) next.subType = 'Choose a sub-category.';
     if (!form.startDate) next.startDate = 'Choose a start date.';
     if (!form.endDate) next.endDate = 'Choose an end date.';
     if (form.startDate && form.endDate && form.endDate < form.startDate) next.endDate = 'End date cannot be before the start date.';
     if (form.isHalfDay && form.startDate !== form.endDate) next.endDate = 'A half day must start and end on the same date.';
-    if (!form.reason.trim() || form.reason.trim().length < 3) next.reason = 'Give a reason of at least 3 characters.';
+
+    if (isReasonMandatory) {
+      if (!form.reason.trim() || form.reason.trim().length < 3) {
+        next.reason = 'Give a reason of at least 3 characters for "Others".';
+      }
+    } else if (form.reason.trim() && form.reason.trim().length < 3) {
+      next.reason = 'If provided, reason must be at least 3 characters.';
+    }
+
     setErrors(next);
     if (Object.keys(next).length) return;
 
     const payload = { ...form };
+    if (!payload.reason.trim() && payload.subType) {
+      payload.reason = payload.subType;
+    }
     if (!payload.isHalfDay) delete payload.halfDayType;
     if (!payload.employee) delete payload.employee;
     save.mutate(payload);
   };
 
   return (
-    <Modal open={open} onClose={close} title="Apply for leave" description="Your reporting manager will be notified once the request is submitted.">
+    <Modal open={open} onClose={close} title="Apply for leave" description="Your reporting manager, HR, CTO, and Founder/CEO will be notified once the request is submitted.">
       <form onSubmit={submit} className="space-y-4 p-5">
         {can('manageLeaveSettings') && (
           <FormField label="Apply on behalf of" hint="Leave blank to apply for yourself.">
@@ -350,7 +390,7 @@ function ApplyLeaveModal({ open, onClose, leaveTypes, onSaved }) {
         <FormField label="Leave type" required error={errors.leaveType}>
           <Select
             value={form.leaveType}
-            onChange={(e) => setForm({ ...form, leaveType: e.target.value })}
+            onChange={(e) => setForm({ ...form, leaveType: e.target.value, subType: '' })}
             options={leaveTypes.map((t) => ({ value: t._id, label: `${t.name} (${t.code})` }))}
             placeholder="Select a leave type"
           />
@@ -360,6 +400,17 @@ function ApplyLeaveModal({ open, onClose, leaveTypes, onSaved }) {
             </p>
           )}
         </FormField>
+
+        {availableSubTypes.length > 0 && (
+          <FormField label="Sub-category" required error={errors.subType}>
+            <Select
+              value={form.subType}
+              onChange={(e) => setForm({ ...form, subType: e.target.value })}
+              options={availableSubTypes.map((s) => ({ value: s, label: s }))}
+              placeholder="Select a sub-category"
+            />
+          </FormField>
+        )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Start date" required error={errors.startDate}>
@@ -408,13 +459,21 @@ function ApplyLeaveModal({ open, onClose, leaveTypes, onSaved }) {
           </p>
         </div>
 
-        <FormField label="Reason" required error={errors.reason}>
+        <FormField
+          label={isReasonMandatory ? 'Reason' : 'Reason (Optional)'}
+          required={isReasonMandatory}
+          error={errors.reason}
+        >
           <textarea
             className="input min-h-[80px]"
             value={form.reason}
             maxLength={500}
             onChange={(e) => setForm({ ...form, reason: e.target.value })}
-            placeholder="Briefly explain the reason for this leave"
+            placeholder={
+              isReasonMandatory
+                ? 'Please explain the reason for this leave (required for Others)'
+                : 'Briefly explain the reason for this leave (optional)'
+            }
           />
         </FormField>
 

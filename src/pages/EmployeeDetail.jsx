@@ -13,7 +13,7 @@ import {
   FormField, Select, FileUpload, ConfirmDialog, DataTable, ProgressBar,
 } from '../components/ui';
 import { DOCUMENT_CATEGORIES, IDENTITY_TYPES } from '../constants';
-import { formatDate, formatFileSize, errorMessage, fieldErrors, downloadBlob } from '../lib/format';
+import { formatDate, formatFileSize, errorMessage, fieldErrors, downloadBlob, viewBlob } from '../lib/format';
 
 export default function EmployeeDetail() {
   const { id } = useParams();
@@ -91,12 +91,33 @@ export default function EmployeeDetail() {
     onError: (err) => { toast.error(errorMessage(err)); setRejectingDoc(null); },
   });
 
+  const [viewingDoc, setViewingDoc] = useState(null);
+
   const handleDownload = async (doc) => {
     try {
       const res = await documentAPI.download(doc._id);
       downloadBlob(res.data, doc.originalName || doc.name);
     } catch (err) {
       toast.error(errorMessage(err, 'Could not download this document.'));
+    }
+  };
+
+  const handleView = async (doc) => {
+    setViewingDoc(doc._id);
+    const win = window.open('about:blank', '_blank');
+    if (win) {
+      win.document.write('<p style="font-family: sans-serif; padding: 20px; color: #4b5563;">Opening document...</p>');
+    }
+    try {
+      const res = await documentAPI.view(doc._id);
+      const mimeType = res.headers?.['content-type'] || doc.fileType || 'application/pdf';
+      const blob = new Blob([res.data], { type: mimeType });
+      viewBlob(blob, win);
+    } catch (err) {
+      if (win) win.close();
+      toast.error(errorMessage(err, 'Could not view this document.'));
+    } finally {
+      setViewingDoc(null);
     }
   };
 
@@ -253,7 +274,14 @@ export default function EmployeeDetail() {
                 header: 'Actions',
                 render: (d) => (
                   <div className="flex gap-2">
-                    <a href={documentAPI.viewUrl(d._id)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-primary-600 hover:underline"><Eye className="h-3 w-3" /> View</a>
+                    <button
+                      type="button"
+                      onClick={() => handleView(d)}
+                      disabled={viewingDoc === d._id}
+                      className="flex items-center gap-1 text-xs text-primary-600 hover:underline disabled:opacity-50"
+                    >
+                      <Eye className="h-3 w-3" /> {viewingDoc === d._id ? '…' : 'View'}
+                    </button>
                     <button type="button" onClick={() => handleDownload(d)} className="flex items-center gap-1 text-xs text-gray-500 hover:underline"><Download className="h-3 w-3" /> Download</button>
                     {can('manageDocuments') && d.status !== 'VERIFIED' && (
                       <button type="button" onClick={() => verifyMut.mutate(d._id)} className="flex items-center gap-1 text-xs text-green-600 hover:underline"><CheckCircle2 className="h-3 w-3" /> Verify</button>

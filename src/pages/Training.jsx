@@ -12,7 +12,7 @@ import {
   Select, Modal, FormField, StatusBadge, Avatar, EmptyState, LoadingBlock, FileUpload, ProgressBar,
 } from '../components/ui';
 import { TRAINING_MATERIAL_TYPES } from '../constants';
-import { formatDate, formatDateTime, errorMessage, fieldErrors } from '../lib/format';
+import { formatDate, formatDateTime, errorMessage, fieldErrors, viewBlob } from '../lib/format';
 
 export default function Training() {
   const { can } = useAuth();
@@ -102,10 +102,25 @@ function TrainingViewerModal({ assignment, onClose, onOpened }) {
   if (!assignment) return <Modal open={false} onClose={onClose} title="" />;
   const t = assignment.training;
 
-  const open = () => {
+  const open = async () => {
     onOpened(assignment._id);
-    if (t.materialType === 'FILE') window.open(trainingAPI.downloadUrl(t._id), '_blank', 'noreferrer');
-    else window.open(t.externalUrl, '_blank', 'noreferrer');
+    if (t.materialType === 'FILE') {
+      const win = window.open('about:blank', '_blank');
+      if (win) {
+        win.document.write('<p style="font-family: sans-serif; padding: 20px; color: #4b5563;">Opening material...</p>');
+      }
+      try {
+        const res = await trainingAPI.download(t._id);
+        const mimeType = res.headers?.['content-type'] || 'application/pdf';
+        const blob = new Blob([res.data], { type: mimeType });
+        viewBlob(blob, win);
+      } catch (err) {
+        if (win) win.close();
+        toast.error(errorMessage(err, 'Could not open material.'));
+      }
+    } else {
+      window.open(t.externalUrl, '_blank', 'noreferrer');
+    }
   };
 
   return (

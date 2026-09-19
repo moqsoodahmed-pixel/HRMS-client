@@ -12,7 +12,7 @@ import {
   Select, Modal, FormField, StatusBadge, Avatar, EmptyState, ConfirmDialog, FileUpload, LoadingBlock,
 } from '../components/ui';
 import { DOCUMENT_CATEGORIES, documentCategoryGroup } from '../constants';
-import { formatDate, formatFileSize, errorMessage, fieldErrors, downloadBlob } from '../lib/format';
+import { formatDate, formatFileSize, errorMessage, fieldErrors, downloadBlob, viewBlob } from '../lib/format';
 
 /**
  * Employee list on the left, document management for the selected employee
@@ -126,6 +126,7 @@ function EmployeeDocumentPane({ employee, canManage, canUpload }) {
   const [rejecting, setRejecting] = useState(null);
   const [archiving, setArchiving] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
+  const [viewingId, setViewingId] = useState(null);
 
   const docsQuery = useQuery({
     queryKey: ['employee-docs', employee._id],
@@ -172,6 +173,25 @@ function EmployeeDocumentPane({ employee, canManage, canUpload }) {
       toast.error(errorMessage(err, 'Could not download this document.'));
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const view = async (doc) => {
+    setViewingId(doc._id);
+    const win = window.open('about:blank', '_blank');
+    if (win) {
+      win.document.write('<p style="font-family: sans-serif; padding: 20px; color: #4b5563;">Opening document...</p>');
+    }
+    try {
+      const res = await documentAPI.view(doc._id);
+      const mimeType = res.headers?.['content-type'] || doc.fileType || 'application/pdf';
+      const blob = new Blob([res.data], { type: mimeType });
+      viewBlob(blob, win);
+    } catch (err) {
+      if (win) win.close();
+      toast.error(errorMessage(err, 'Could not view this document.'));
+    } finally {
+      setViewingId(null);
     }
   };
 
@@ -252,9 +272,14 @@ function EmployeeDocumentPane({ employee, canManage, canUpload }) {
               header: 'Actions',
               render: (row) => (
                 <div className="flex items-center gap-2">
-                  <a href={documentAPI.viewUrl(row._id)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline">
-                    <Eye className="h-3.5 w-3.5" /> View
-                  </a>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline disabled:opacity-50"
+                    onClick={() => view(row)}
+                    disabled={viewingId === row._id}
+                  >
+                    <Eye className="h-3.5 w-3.5" /> {viewingId === row._id ? 'Opening…' : 'View'}
+                  </button>
                   <button type="button" className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:underline disabled:opacity-50" onClick={() => download(row)} disabled={downloadingId === row._id}>
                     <Download className="h-3.5 w-3.5" /> {downloadingId === row._id ? '…' : 'Download'}
                   </button>

@@ -158,6 +158,21 @@ export function downloadBlob(blob, filename) {
   window.URL.revokeObjectURL(url);
 }
 
+/** Opens a Blob in a browser tab for inline viewing (e.g. image or PDF). */
+export function viewBlob(blob, targetWindow = null) {
+  const url = window.URL.createObjectURL(blob);
+  if (targetWindow && !targetWindow.closed) {
+    try {
+      targetWindow.location.href = url;
+    } catch {
+      window.open(url, '_blank');
+    }
+  } else {
+    window.open(url, '_blank');
+  }
+  setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+}
+
 /** Serialises rows to CSV and downloads them. `columns` is `[{ key, label, value? }]`. */
 export function exportCsv(filename, columns, rows) {
   const escape = (value) => {
