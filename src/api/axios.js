@@ -187,6 +187,7 @@ export const documentAPI = {
   verify: (id) => api.patch(`/documents/${id}/verify`),
   reject: (id, reason) => api.patch(`/documents/${id}/reject`, { reason }),
   archive: (id) => api.patch(`/documents/${id}/archive`),
+  updateExtractedData: (id, extractedData) => api.patch(`/documents/${id}/extracted-data`, { extractedData }),
   identity: {
     list: (employeeId) => api.get(`/employees/${employeeId}/identity`),
     save: (employeeId, data) => api.post(`/employees/${employeeId}/identity`, data),

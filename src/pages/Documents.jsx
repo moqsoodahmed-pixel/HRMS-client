@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   FileText, Upload, Download, Eye, CheckCircle2, XCircle, Archive, FileCheck, FileClock, FileX,
-  AlertTriangle, Users, Search,
+  AlertTriangle, Users, Search, Copy, Check, Edit2, Sparkles,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { documentAPI, employeeAPI } from '../api/axios';
@@ -13,6 +13,7 @@ import {
 } from '../components/ui';
 import { DOCUMENT_CATEGORIES, documentCategoryGroup } from '../constants';
 import { formatDate, formatFileSize, errorMessage, fieldErrors, downloadBlob, viewBlob } from '../lib/format';
+import ExtractedDocumentPanels from '../components/ExtractedDocumentPanels';
 
 /**
  * Employee list on the left, document management for the selected employee
@@ -58,7 +59,7 @@ export default function Documents() {
           {!activeEmployee ? (
             <div className="card"><EmptyState icon={Users} title="Select an employee" description="Choose an employee on the left to manage their documents." /></div>
           ) : (
-            <EmployeeDocumentPane employee={activeEmployee} canManage={canManage} canUpload={canUpload} />
+            <EmployeeDocumentPane employee={activeEmployee} canManage={canManage} canUpload={canUpload} isOwnRecord={isOwnRecord} />
           )}
         </div>
       </div>
@@ -120,7 +121,9 @@ function EmployeeListPane({ selected, onSelect }) {
 /* Right pane — document management for one employee                   */
 /* ------------------------------------------------------------------ */
 
-function EmployeeDocumentPane({ employee, canManage, canUpload }) {
+function EmployeeDocumentPane({ employee, canManage, canUpload, isOwnRecord: propIsOwnRecord }) {
+  const { employee: ownEmployee } = useAuth();
+  const isOwnRecord = propIsOwnRecord ?? (Boolean(employee?._id) && employee._id === ownEmployee?._id);
   const queryClient = useQueryClient();
   const [uploadFor, setUploadFor] = useState(null); // checklist item being uploaded for, or null
   const [rejecting, setRejecting] = useState(null);
@@ -283,6 +286,19 @@ function EmployeeDocumentPane({ employee, canManage, canUpload }) {
                   <button type="button" className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:underline disabled:opacity-50" onClick={() => download(row)} disabled={downloadingId === row._id}>
                     <Download className="h-3.5 w-3.5" /> {downloadingId === row._id ? '…' : 'Download'}
                   </button>
+                  {row.extractedData && Object.keys(row.extractedData).length > 0 && (
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline"
+                      onClick={() => {
+                        const el = document.getElementById(`extracted-panel-${row._id}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      title="View extracted OCR details"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" /> Details
+                    </button>
+                  )}
                   {canManage && row.status !== 'ARCHIVED' && (
                     <>
                       {row.status !== 'VERIFIED' && (
@@ -317,6 +333,13 @@ function EmployeeDocumentPane({ employee, canManage, canUpload }) {
           }
         />
       </div>
+
+      <ExtractedDocumentPanels
+        docs={docs}
+        isOwnRecord={isOwnRecord}
+        canManage={canManage}
+        onUpdated={refresh}
+      />
 
       <UploadModal open={Boolean(uploadFor)} onClose={() => setUploadFor(null)} employee={employee} initialItem={uploadFor} onSaved={refresh} />
 

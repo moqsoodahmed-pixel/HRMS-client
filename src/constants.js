@@ -93,7 +93,7 @@ export function documentCategoryGroup(category) {
 // computed server-side once the employee exists; this copy is only used to
 // preview what will be required during the "Add Employee" wizard.
 export const REQUIRED_DOCUMENT_TYPES = [
-  { category: 'Aadhaar Card', label: 'Government ID / Identity Proof', required: true },
+  { category: 'Aadhaar Card', label: 'Aadhaar ID', required: true },
   { category: 'Address Proof', label: 'Address Proof', required: true },
   { category: 'PAN Card', label: 'PAN / Tax Document', required: true },
   { category: 'Bank Account Details', label: 'Bank Account Details', required: true },

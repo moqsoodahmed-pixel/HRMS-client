@@ -14,6 +14,7 @@ import {
 } from '../components/ui';
 import { DOCUMENT_CATEGORIES, IDENTITY_TYPES } from '../constants';
 import { formatDate, formatFileSize, errorMessage, fieldErrors, downloadBlob, viewBlob } from '../lib/format';
+import ExtractedDocumentPanels from '../components/ExtractedDocumentPanels';
 
 export default function EmployeeDetail() {
   const { id } = useParams();
@@ -296,6 +297,13 @@ export default function EmployeeDetail() {
             rows={docs}
             isLoading={docsLoading}
             empty={<EmptyState title="No documents" description="No documents uploaded yet." />}
+          />
+
+          <ExtractedDocumentPanels
+            docs={docs}
+            isOwnRecord={Boolean(ownEmployee?._id) && ownEmployee._id === id}
+            canManage={can('manageDocuments')}
+            onUpdated={() => queryClient.invalidateQueries({ queryKey: ['employee-docs', id] })}
           />
         </div>
       )}
