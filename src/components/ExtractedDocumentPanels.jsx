@@ -238,8 +238,20 @@ export function ExtractedDocCard({ doc, canEdit, onUpdated }) {
 }
 
 export function ExtractedDocumentPanels({ docs, isOwnRecord, canManage, onUpdated }) {
+  const structuredCategories = new Set([
+    'Aadhaar Card',
+    'PAN Card',
+    'Bank Account Details',
+    'Cancelled Cheque',
+    'Educational Certificates',
+    'Experience Certificate',
+    'Address Proof',
+  ]);
   const docsWithData = (docs || []).filter(
-    (d) => d.extractedData && Object.keys(d.extractedData).length > 0 && !d.isArchived
+    (d) =>
+      !d.isArchived &&
+      ((d.extractedData && Object.keys(d.extractedData).length > 0) ||
+        structuredCategories.has(d.category))
   );
 
   if (!docsWithData.length) return null;

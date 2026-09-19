@@ -286,7 +286,10 @@ function EmployeeDocumentPane({ employee, canManage, canUpload, isOwnRecord: pro
                   <button type="button" className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:underline disabled:opacity-50" onClick={() => download(row)} disabled={downloadingId === row._id}>
                     <Download className="h-3.5 w-3.5" /> {downloadingId === row._id ? '…' : 'Download'}
                   </button>
-                  {row.extractedData && Object.keys(row.extractedData).length > 0 && (
+                  {(!row.isArchived && (
+                    (row.extractedData && Object.keys(row.extractedData).length > 0) ||
+                    ['Aadhaar Card', 'PAN Card', 'Bank Account Details', 'Cancelled Cheque', 'Educational Certificates', 'Experience Certificate', 'Address Proof'].includes(row.category)
+                  )) && (
                     <button
                       type="button"
                       className="flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline"
