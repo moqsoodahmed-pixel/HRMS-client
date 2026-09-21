@@ -9,12 +9,12 @@ import { leadsAPI, employeeAPI } from '../api/axios';
 import { PageHeader, Spinner, EmptyState, LoadingBlock } from '../components/ui';
 
 const STATUS_COLORS = {
-  NEW:            'bg-blue-100 text-blue-700',
-  CONTACTED:      'bg-yellow-100 text-yellow-700',
-  INTERESTED:     'bg-green-100 text-green-700',
+  NEW: 'bg-blue-100 text-blue-700',
+  CONTACTED: 'bg-yellow-100 text-yellow-700',
+  INTERESTED: 'bg-green-100 text-green-700',
   NOT_INTERESTED: 'bg-red-100 text-red-700',
-  CONVERTED:      'bg-emerald-100 text-emerald-700',
-  LOST:           'bg-gray-100 text-gray-500',
+  CONVERTED: 'bg-emerald-100 text-emerald-700',
+  LOST: 'bg-gray-100 text-gray-500',
 };
 
 const STATUS_OPTIONS = ['NEW', 'CONTACTED', 'INTERESTED', 'NOT_INTERESTED', 'CONVERTED', 'LOST'];
@@ -186,7 +186,7 @@ function StatsDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    leadsAPI.stats().then(r => setStats(r.data.data)).catch(() => {}).finally(() => setLoading(false));
+    leadsAPI.stats().then(r => setStats(r.data.data)).catch(() => { }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="mb-6"><Spinner /></div>;
@@ -333,7 +333,7 @@ function ReassignModal({ lead, onClose, onUpdated }) {
   useEffect(() => {
     employeeAPI.list({ department: 'Sales', status: 'ACTIVE', limit: 100 })
       .then(r => setEmployees(r.data.data || []))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleSave = async () => {
@@ -420,8 +420,8 @@ function LeadHistoryModal({ leadId, onClose }) {
                     {lead.statusHistory.map((h, i) => (
                       <div key={i} className="flex items-start gap-2 text-xs border-l-2 border-primary-200 pl-3 py-1">
                         <div className="flex-1">
-                          {h.previousStatus && <span className="text-gray-400">{h.previousStatus.replace(/_/g,' ')} → </span>}
-                          <span className="font-medium">{h.newStatus.replace(/_/g,' ')}</span>
+                          {h.previousStatus && <span className="text-gray-400">{h.previousStatus.replace(/_/g, ' ')} → </span>}
+                          <span className="font-medium">{h.newStatus.replace(/_/g, ' ')}</span>
                           {h.notes && <p className="text-gray-500 mt-0.5">{h.notes}</p>}
                         </div>
                         <div className="text-gray-400 whitespace-nowrap">
@@ -554,13 +554,12 @@ function MiniCalendar({ selectedDate, onSelectDate, onClose }) {
                 onSelectDate(item.dateStr);
                 onClose();
               }}
-              className={`h-7 w-7 rounded-full text-xs font-medium flex items-center justify-center transition-all ${
-                isSelected
+              className={`h-7 w-7 rounded-full text-xs font-medium flex items-center justify-center transition-all ${isSelected
                   ? 'bg-primary-600 text-white font-semibold shadow-sm'
                   : isToday
-                  ? 'border border-primary-500 text-primary-600 hover:bg-primary-50'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
+                    ? 'border border-primary-500 text-primary-600 hover:bg-primary-50'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
             >
               {item.day}
             </button>
@@ -599,11 +598,18 @@ function MiniCalendar({ selectedDate, onSelectDate, onClose }) {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function SalesLeads() {
-  const { user, isElevated } = useAuth();
+  const { user, employee, isElevated } = useAuth();
   const role = user?.role;
   const canUpload = UPLOAD_ROLES.includes(role) || isElevated;
   const isMgmt = MGMT_ROLES.includes(role) || isElevated;
   const isEmployee = role === 'EMPLOYEE';
+
+  // Row-number ("No.") column — restricted to CEO (and CTO, same tier),
+  // HR, Project Head, and Sales-team employees only. Other roles that can
+  // still open this page (Manager, Director, IT Head, Finance) do not get it.
+  const salesDept = (employee?.department || '').toLowerCase();
+  const isSalesEmployee = role === 'EMPLOYEE' && (salesDept === 'sales' || salesDept.includes('sales') || salesDept.includes('business development'));
+  const canSeeRowNumber = isElevated || role === 'HR_ADMIN' || role === 'PROJECT_HEAD' || isSalesEmployee;
 
   // Reveal state — only one lead at a time, 20s timer
   const [revealed, setRevealed] = useState(null); // { leadId, email, phone, countdown }
@@ -700,7 +706,7 @@ export default function SalesLeads() {
 
   useEffect(() => {
     if (canUpload) {
-      leadsAPI.batches().then(r => setBatches(r.data.data || [])).catch(() => {});
+      leadsAPI.batches().then(r => setBatches(r.data.data || [])).catch(() => { });
     }
   }, [canUpload]);
 
@@ -783,9 +789,8 @@ export default function SalesLeads() {
                   type="button"
                   aria-label="Calendar Lead Filter"
                   onClick={() => setShowCalendar(prev => !prev)}
-                  className={`btn-secondary !p-2 transition-colors ${
-                    customDate ? 'border-primary-500 text-primary-600 bg-primary-50' : 'text-gray-600'
-                  }`}
+                  className={`btn-secondary !p-2 transition-colors ${customDate ? 'border-primary-500 text-primary-600 bg-primary-50' : 'text-gray-600'
+                    }`}
                   title={customDate ? `Filtered by ${customDate} (click to change)` : "Select date from calendar"}
                 >
                   <Calendar className="h-4 w-4" />
@@ -842,6 +847,7 @@ export default function SalesLeads() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                      {canSeeRowNumber && <th className="px-4 py-3 text-left">No.</th>}
                       <th className="px-4 py-3 text-left">Lead</th>
                       <th className="px-4 py-3 text-left">Contact</th>
                       {isMgmt && <th className="px-4 py-3 text-left">Assigned To</th>}
@@ -852,8 +858,11 @@ export default function SalesLeads() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {leads.map((lead) => (
+                    {leads.map((lead, idx) => (
                       <tr key={lead._id} className="hover:bg-gray-50 transition-colors">
+                        {canSeeRowNumber && (
+                          <td className="px-4 py-3 text-xs text-gray-500 font-medium">{(page - 1) * LIMIT + idx + 1}</td>
+                        )}
                         <td className="px-4 py-3">
                           <div className="font-medium text-gray-900">{lead.name}</div>
                           {lead.company && (
