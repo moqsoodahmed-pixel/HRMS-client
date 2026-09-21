@@ -15,7 +15,15 @@ const PERMISSIONS = {
   deleteEmployee: ['HR_ADMIN', 'PROJECT_HEAD'],
   revealIdentity: ['HR_ADMIN', 'PROJECT_HEAD'],
   // Attendance
-  manageAttendance: ['HR_ADMIN'],
+  // FOUNDER_CEO/CTO/SUPER_ADMIN already get every permission via the
+  // isElevated bypass below, so they don't need to be listed here — but
+  // PROJECT_HEAD does, to match the server's HR_ROLES (utils/roles.js),
+  // which already authorizes PROJECT_HEAD on PATCH /attendance/:id and the
+  // correction-request approve/reject routes. Without this, a Project Head
+  // could not see the Edit-attendance button even though the API would
+  // have accepted their request — this is the fix for "HR/CEO/CTO/Project
+  // Head can correct an accidental check-out when the employee reports it."
+  manageAttendance: ['HR_ADMIN', 'PROJECT_HEAD'],
   viewAllAttendance: ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
   // Leave
   approveLeave: ['FOUNDER_CEO', 'SUPER_ADMIN', 'CTO', 'HR_ADMIN', ...TEAM_SCOPED_ROLES],
@@ -94,7 +102,7 @@ export function AuthProvider({ children }) {
         setUser(r.data.data.user);
         setEmployee(r.data.data.employee);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);

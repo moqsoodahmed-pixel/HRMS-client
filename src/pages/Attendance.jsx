@@ -700,9 +700,19 @@ function AttendanceHistoryPanel() {
       key: 'actions',
       header: '',
       render: (row) => (
-        <button type="button" onClick={() => setEditing(row)} className="btn-ghost" title="Edit attendance">
-          <Pencil className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Employee walked up and reported an accidental check-out — one click
+              clears it and reopens the edit form (with a reason still required)
+              instead of making HR fiddle with the time-picker to blank it out. */}
+          {row.checkIn && row.checkOut && (
+            <button type="button" onClick={() => setEditing({ ...row, __undoCheckOut: true })} className="btn-ghost" title="Undo check-out (employee reported it was accidental)">
+              <RotateCcw className="h-4 w-4" />
+            </button>
+          )}
+          <button type="button" onClick={() => setEditing(row)} className="btn-ghost" title="Edit attendance">
+            <Pencil className="h-4 w-4" />
+          </button>
+        </div>
       ),
     }] : []),
   ], [can]);
@@ -789,12 +799,16 @@ function EditAttendanceModal({ record, onClose, onSaved }) {
   const [errors, setErrors] = useState({});
 
   const key = record?._id;
+  const isUndoCheckOut = Boolean(record?.__undoCheckOut);
   const initial = useMemo(() => ({
     checkIn: toTimeInput(record?.checkIn),
-    checkOut: toTimeInput(record?.checkOut),
+    // "Undo check-out" opens this same form with check-out already cleared —
+    // HR still has to pick a status and give a reason (kept in the audit
+    // log), they just don't have to fight the native time input to blank it.
+    checkOut: isUndoCheckOut ? '' : toTimeInput(record?.checkOut),
     status: record?.status || 'PRESENT',
     notes: record?.notes || '',
-    editReason: '',
+    editReason: isUndoCheckOut ? 'Employee reported an accidental check-out; reverted to checked-in.' : '',
   }), [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const values = { ...initial, ...form };
