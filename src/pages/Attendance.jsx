@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Clock, LogIn, LogOut, Users, UserCheck, UserX, CalendarOff, AlarmClock, Pencil, Plus, Download,
-  ClipboardList, Unlock, CalendarRange, Wallet, Timer, TrendingUp, FileEdit, Coffee,
+  ClipboardList, Unlock, CalendarRange, Wallet, Timer, TrendingUp, FileEdit, Coffee, RotateCcw, AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { attendanceAPI, employeeAPI, attendanceRequestAPI, shiftAPI } from '../api/axios';
@@ -20,6 +20,11 @@ import {
 
 const PAGE_SIZE = 20;
 const today = () => toDateInput(new Date());
+
+// Mirrors UNDO_CHECKOUT_GRACE_MINUTES on the server (attendanceController.js) —
+// only used here to show/hide the "Undo check-out" button and its countdown;
+// the server is the source of truth and will reject an undo past its own window.
+const UNDO_CHECKOUT_GRACE_MINUTES = 10;
 
 /** Monday..Sunday ISO range containing `dateStr`, as {startDate, endDate} YYYY-MM-DD strings. */
 function weekRangeOf(dateStr) {
@@ -45,6 +50,13 @@ function MyAttendanceView() {
   const [filters, setFilters] = useState({ date: today(), status: '' });
   const [page, setPage] = useState(1);
   const [requesting, setRequesting] = useState(false);
+  const [confirmingCheckOut, setConfirmingCheckOut] = useState(false);
+  // Ticks every 15s purely to re-render the "Undo check-out" countdown/visibility.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 15000);
+    return () => clearInterval(id);
+  }, []);
 
   const listQuery = useQuery({
     queryKey: ['attendance', 'list', filters, page],
@@ -67,9 +79,26 @@ function MyAttendanceView() {
   });
   const checkOut = useMutation({
     mutationFn: () => attendanceAPI.checkOut(),
-    onSuccess: () => { toast.success('Checked out'); refreshAll(); },
-    onError: (err) => toast.error(errorMessage(err)),
+    onSuccess: () => {
+      toast.success('Checked out');
+      setConfirmingCheckOut(false);
+      refreshAll();
+    },
+    onError: (err) => { toast.error(errorMessage(err)); setConfirmingCheckOut(false); },
   });
+  const undoCheckOut = useMutation({
+    mutationFn: () => attendanceAPI.undoCheckOut(),
+    onSuccess: () => { toast.success('Check-out undone — you\'re back to working'); refreshAll(); },
+    onError: (err) => { toast.error(errorMessage(err)); refreshAll(); },
+  });
+
+  // Self-service undo window: only offered for UNDO_CHECKOUT_GRACE_MINUTES
+  // after the check-out timestamp the server recorded.
+  const checkOutAt = myToday?.record?.checkOut ? new Date(myToday.record.checkOut).getTime() : null;
+  const undoCheckOutDeadline = checkOutAt ? checkOutAt + UNDO_CHECKOUT_GRACE_MINUTES * 60000 : null;
+  const canUndoCheckOut = Boolean(undoCheckOutDeadline) && nowTick < undoCheckOutDeadline;
+  const undoCheckOutMinutesLeft = canUndoCheckOut ? Math.max(1, Math.ceil((undoCheckOutDeadline - nowTick) / 60000)) : 0;
+
   const breakStart = useMutation({
     mutationFn: () => attendanceAPI.breakStart(),
     onSuccess: () => { toast.success('Break started — enjoy your hour!'); refreshAll(); },
@@ -117,8 +146,8 @@ function MyAttendanceView() {
                   myToday.record?.breakStart && myToday.record?.breakEnd
                     ? <span className="text-sm font-medium text-green-600">{formatTime(myToday.record.breakStart)} – {formatTime(myToday.record.breakEnd)}</span>
                     : myToday.record?.breakStart && !myToday.record?.breakEnd
-                    ? <span className="text-sm font-medium text-amber-600 animate-pulse">On break…</span>
-                    : <span className="text-sm text-gray-400">Not started</span>
+                      ? <span className="text-sm font-medium text-amber-600 animate-pulse">On break…</span>
+                      : <span className="text-sm text-gray-400">Not started</span>
                 }
               />
             </div>
@@ -138,9 +167,14 @@ function MyAttendanceView() {
                   <Coffee className="h-4 w-4" /> End break
                 </button>
               )}
-              <button type="button" className="btn-secondary" onClick={() => checkOut.mutate()} disabled={checkOut.isPending || !myToday.record?.checkIn || Boolean(myToday.record?.checkOut)}>
+              <button type="button" className="btn-secondary" onClick={() => setConfirmingCheckOut(true)} disabled={checkOut.isPending || !myToday.record?.checkIn || Boolean(myToday.record?.checkOut)}>
                 <LogOut className="h-4 w-4" /> Check out
               </button>
+              {canUndoCheckOut && (
+                <button type="button" className="btn-secondary" onClick={() => undoCheckOut.mutate()} disabled={undoCheckOut.isPending}>
+                  <RotateCcw className="h-4 w-4" /> {undoCheckOut.isPending ? 'Undoing…' : `Undo check-out (${undoCheckOutMinutesLeft}m left)`}
+                </button>
+              )}
             </div>
           </div>
 
@@ -187,6 +221,24 @@ function MyAttendanceView() {
       </div>
 
       <RequestModal open={requesting} onClose={() => setRequesting(false)} onSaved={refreshAll} />
+
+      <Modal open={confirmingCheckOut} onClose={() => setConfirmingCheckOut(false)} title="Confirm check-out" size="sm">
+        <div className="space-y-4 p-5">
+          <div className="flex gap-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-sm text-amber-800">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+            <p>This records your check-out time as <strong>{formatTime(new Date())}</strong>. Make sure you're actually done for the day — an early check-out affects today's work-hours calculation.</p>
+          </div>
+          <p className="text-xs text-gray-500">
+            Clicked by mistake? You'll have {UNDO_CHECKOUT_GRACE_MINUTES} minutes after checking out to undo it yourself from this page. After that, you'll need to submit an attendance correction request.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button type="button" className="btn-secondary" onClick={() => setConfirmingCheckOut(false)}>Cancel</button>
+            <button type="button" className="btn-primary" disabled={checkOut.isPending} onClick={() => checkOut.mutate()}>
+              {checkOut.isPending ? 'Checking out…' : 'Yes, check out'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

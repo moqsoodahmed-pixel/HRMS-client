@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -7,7 +7,7 @@ import {
   Megaphone, Activity, Package, Clock, UserPlus, UserMinus, Wallet, Plus,
   ShieldCheck, ScrollText, BarChart3, FileText, Check, X, Receipt, TrendingUp,
   LogIn, LogOut, CalendarDays, PartyPopper, ClipboardList, ShieldAlert, Lock,
-  BadgeCheck, ClipboardCheck, Mail, Briefcase,
+  BadgeCheck, ClipboardCheck, Mail, Briefcase, RotateCcw, AlertTriangle,
 } from 'lucide-react';
 import {
   dashboardAPI, attendanceAPI, leaveAPI, payrollAPI, documentAPI, announcementAPI,
@@ -23,6 +23,11 @@ import {
   errorMessage,
 } from '../lib/format';
 import { COMPANY_NAME } from '../constants';
+
+// Mirrors UNDO_CHECKOUT_GRACE_MINUTES on the server (attendanceController.js) —
+// only used here to show/hide the "Undo check-out" button and its countdown;
+// the server is the source of truth and will reject an undo past its own window.
+const UNDO_CHECKOUT_GRACE_MINUTES = 10;
 
 export default function Dashboard() {
   const { role } = useAuth();
@@ -906,6 +911,13 @@ function EmployeeDashboard() {
   const { user, employee, needsOnboarding } = useAuth();
   const queryClient = useQueryClient();
   const displayName = employee?.fullName || user?.email?.split('@')[0];
+  const [confirmingCheckOut, setConfirmingCheckOut] = useState(false);
+  // Ticks every 15s purely to re-render the "Undo check-out" countdown/visibility.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 15000);
+    return () => clearInterval(id);
+  }, []);
 
   // While onboarding is not APPROVED, none of the operational modules below
   // are reachable server-side either (see requireOnboardingApproved) — skip
@@ -959,9 +971,25 @@ function EmployeeDashboard() {
   });
   const checkOut = useMutation({
     mutationFn: () => attendanceAPI.checkOut(),
-    onSuccess: () => { toast.success('Checked out'); refreshAttendance(); },
-    onError: (err) => toast.error(errorMessage(err)),
+    onSuccess: () => {
+      toast.success('Checked out');
+      setConfirmingCheckOut(false);
+      refreshAttendance();
+    },
+    onError: (err) => { toast.error(errorMessage(err)); setConfirmingCheckOut(false); },
   });
+  const undoCheckOut = useMutation({
+    mutationFn: () => attendanceAPI.undoCheckOut(),
+    onSuccess: () => { toast.success('Check-out undone — you\'re back to working'); refreshAttendance(); },
+    onError: (err) => { toast.error(errorMessage(err)); refreshAttendance(); },
+  });
+
+  // Self-service undo window: only offered for UNDO_CHECKOUT_GRACE_MINUTES
+  // after the check-out timestamp the server recorded.
+  const checkOutAt = myToday?.record?.checkOut ? new Date(myToday.record.checkOut).getTime() : null;
+  const undoCheckOutDeadline = checkOutAt ? checkOutAt + UNDO_CHECKOUT_GRACE_MINUTES * 60000 : null;
+  const canUndoCheckOut = Boolean(undoCheckOutDeadline) && nowTick < undoCheckOutDeadline;
+  const undoCheckOutMinutesLeft = canUndoCheckOut ? Math.max(1, Math.ceil((undoCheckOutDeadline - nowTick) / 60000)) : 0;
 
   const totalAvailable = balances.reduce((sum, b) => sum + (b.remainingDays || 0), 0);
   const totalUsed = balances.reduce((sum, b) => sum + (b.usedDays || 0), 0);
@@ -995,16 +1023,39 @@ function EmployeeDashboard() {
               <p className="mt-1 text-sm font-medium">{myToday?.record?.checkOut ? formatTime(myToday.record.checkOut) : myToday?.record?.checkIn ? duration(myToday.record.checkIn) : '—'}</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-primary" onClick={() => checkIn.mutate()} disabled={checkIn.isPending || Boolean(myToday?.record?.checkIn)}>
               <LogIn className="h-4 w-4" /> Check in
             </button>
-            <button type="button" className="btn-secondary" onClick={() => checkOut.mutate()} disabled={checkOut.isPending || !myToday?.record?.checkIn || Boolean(myToday?.record?.checkOut)}>
+            <button type="button" className="btn-secondary" onClick={() => setConfirmingCheckOut(true)} disabled={checkOut.isPending || !myToday?.record?.checkIn || Boolean(myToday?.record?.checkOut)}>
               <LogOut className="h-4 w-4" /> Check out
             </button>
+            {canUndoCheckOut && (
+              <button type="button" className="btn-secondary" onClick={() => undoCheckOut.mutate()} disabled={undoCheckOut.isPending}>
+                <RotateCcw className="h-4 w-4" /> {undoCheckOut.isPending ? 'Undoing…' : `Undo check-out (${undoCheckOutMinutesLeft}m left)`}
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      <Modal open={confirmingCheckOut} onClose={() => setConfirmingCheckOut(false)} title="Confirm check-out" size="sm">
+        <div className="space-y-4 p-5">
+          <div className="flex gap-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-sm text-amber-800">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+            <p>This records your check-out time as <strong>{formatTime(new Date())}</strong>. Make sure you're actually done for the day — an early check-out affects today's work-hours calculation.</p>
+          </div>
+          <p className="text-xs text-gray-500">
+            Clicked by mistake? You'll have {UNDO_CHECKOUT_GRACE_MINUTES} minutes after checking out to undo it yourself from this page. After that, you'll need to submit an attendance correction request.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button type="button" className="btn-secondary" onClick={() => setConfirmingCheckOut(false)}>Cancel</button>
+            <button type="button" className="btn-primary" disabled={checkOut.isPending} onClick={() => checkOut.mutate()}>
+              {checkOut.isPending ? 'Checking out…' : 'Yes, check out'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
