@@ -63,6 +63,18 @@ export default function EmployeeForm() {
       dateOfExit: emp.dateOfExit?.slice(0, 10) || '',
       dateOfBirth: emp.dateOfBirth?.slice(0, 10) || '',
       noticePeriodDays: emp.noticePeriodDays ?? '',
+      // The employee record itself has no `role` field — it lives on the
+      // linked login account (`emp.user.role`, populated by GET /employees/:id).
+      // Without this, the Account Role selector always fell back to the
+      // EMPTY_FORM default of 'EMPLOYEE' while editing, even for someone
+      // who was already HR_ADMIN.
+      role: emp.user?.role || 'EMPLOYEE',
+      // Never pre-fill password boxes from a save — there is nothing to
+      // show, and leaving these blank until the user actually types a new
+      // password is what lets handleSubmit tell "no change" apart from
+      // "change to this".
+      password: '',
+      confirmPassword: '',
     });
   }, [data]);
 
@@ -162,8 +174,16 @@ export default function EmployeeForm() {
       setStep(next.employeeCode || next.firstName || next.officialEmail || next.personalEmail ? 1 : 2);
       return;
     }
-    const { confirmPassword, ...rest } = form;
+    const { confirmPassword, password, ...rest } = form;
     const payload = { ...rest, fullName: `${form.firstName} ${form.lastName}`.trim() };
+    // On create, the password the user typed is required — send it.
+    // On edit, the password box is always blank (see the effect above) and
+    // is NEVER part of this save; changing a password goes through the
+    // separate "Change Password" form/endpoint below. Previously this form
+    // sent `password: ''` on every single edit, which the server rejected
+    // with "Password must be at least 8 characters" — so editing ANY
+    // employee field (including the official email) failed with that error.
+    if (!isEdit) payload.password = password;
     if (isEdit) updateMut.mutate(payload);
     else createMut.mutate(payload);
   };
@@ -198,9 +218,8 @@ export default function EmployeeForm() {
         <ol className="mb-6 flex flex-wrap items-center gap-2">
           {WIZARD_STEPS.map((s, i) => (
             <li key={s.id} className="flex items-center gap-2">
-              <span className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ${
-                step === s.id ? 'bg-primary-600 text-white' : step > s.id ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-              }`}>
+              <span className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ${step === s.id ? 'bg-primary-600 text-white' : step > s.id ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}>
                 {step > s.id ? <Check className="h-3.5 w-3.5" /> : s.id}
                 {s.label}
               </span>
@@ -309,8 +328,17 @@ export default function EmployeeForm() {
                 <Select value={form.department} onChange={(e) => set('department', e.target.value)} options={DEPARTMENTS} placeholder="Select department" />
               </FormField>
             </div>
-            {/* Account role — only shown when creating a new employee, not editing */}
-            {!isEdit && (
+            {/*
+              Account role — shown on create, and also on edit so an
+              employee's permissions can actually be corrected later (e.g.
+              promoting an intern to HR_ADMIN once they're confirmed).
+              Previously this was hidden on edit AND the server had no
+              `role` field on this endpoint at all, so a role picked here
+              was silently dropped and the account stayed EMPLOYEE forever.
+              Only people who could already change an employee's login
+              (canChangePassword's role set) may touch this on edit.
+            */}
+            {(!isEdit || canChangePassword) && (
               <FormField label="Account Role">
                 <select
                   className="input"
