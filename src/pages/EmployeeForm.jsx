@@ -19,15 +19,70 @@ const EMPTY_FORM = {
   password: '', confirmPassword: '',
 };
 
-// When someone is put into the HR department, they need HR module access to
-// do their job — that's what "she's in HR, why does the system treat her as
-// a plain Employee" comes down to. This is only ever a SUGGESTED starting
-// value for the Account Role dropdown (never silently applied): it pre-fills
-// the picker so the person saving the form can see and confirm it, but a
-// role the CEO/HR has deliberately chosen is never overwritten.
+// ── Auto-detect the right Account Role from what's actually typed ─────────
+// "She's in HR, why does the system treat her as a plain Employee" (and the
+// follow-up: "when Admin/CEO/CTO/HR pick a title like Business Development
+// or Sales Lead, give that person access matching their role") both come
+// down to the same gap: nothing on this form ever looked at Designation or
+// Department to work out what access someone should actually have — the
+// Account Role dropdown just sat at its default until a human remembered to
+// change it by hand.
+//
+// This is only ever a SUGGESTED starting value for that dropdown, computed
+// fresh from Designation + Department (never silently saved on its own —
+// see recomputeRoleSuggestion below): it pre-fills the picker so whoever is
+// saving the form can see and confirm it, but a role someone has
+// deliberately chosen — on this form or on an earlier save — is never
+// overwritten.
+//
+// Designation is checked first (it's the specific job title — "Sales Lead",
+// "Business Development Head", "Finance Manager" — so it wins over the
+// broader department default). Rules are ordered most-specific-first; the
+// first one that matches wins.
+const DESIGNATION_ROLE_RULES = [
+  // Elevated roles are only ever suggested to a caller who could actually
+  // grant them — the server caps a non-elevated caller's request straight
+  // back to EMPLOYEE anyway (see employeeController.js resolveAssignableRole),
+  // and suggesting a role that will silently revert on save is worse than
+  // not suggesting one.
+  { test: /founder|chief executive|\bceo\b/i, role: 'FOUNDER_CEO', elevatedCallerOnly: true },
+  { test: /\bcto\b|chief technology/i, role: 'CTO', elevatedCallerOnly: true },
+  { test: /\bdirector\b/i, role: 'DIRECTOR' },
+  { test: /\bauditor\b/i, role: 'AUDITOR' },
+  { test: /human resources|\bhr\b/i, role: 'HR_ADMIN' },
+  { test: /\bit\b.*\bhead\b|\bhead\b.*\bit\b/i, role: 'IT_HEAD' },
+  { test: /\bmanager\b/i, role: 'MANAGER' },
+  // Catch-all for any team/department lead title — "Sales Lead", "Business
+  // Development Head", "Project Head", "Team Lead", etc. PROJECT_HEAD is
+  // the app's generic team-scoped lead role (see utils/roles.js
+  // TEAM_SCOPED_ROLES) and isn't limited to literal "project" work.
+  { test: /\bhead\b|\blead\b/i, role: 'PROJECT_HEAD' },
+];
+
+// Fallback when nothing in the Designation matched anything above — keyed
+// by Department. Deliberately short: HR is the department where "still
+// stuck on plain Employee" was reported, so it gets a same-as-designation
+// default. Finance/IT are NOT defaulted here even though they have roles,
+// because FINANCE and IT_HEAD grant sensitive, department-wide write access
+// (payroll, compensation) that shouldn't be handed to every employee in
+// that department just for being in it — those still need an explicit
+// Designation match (e.g. "Finance Manager") or a manual pick.
 const DEPARTMENT_SUGGESTED_ROLE = {
   HR: 'HR_ADMIN',
 };
+
+/** Returns a role string to suggest, or null if nothing matched (stay EMPLOYEE). */
+function computeSuggestedRole(department, designation, isElevatedCaller) {
+  const title = (designation || '').trim();
+  if (title) {
+    for (const rule of DESIGNATION_ROLE_RULES) {
+      if (!rule.test.test(title)) continue;
+      if (rule.elevatedCallerOnly && !isElevatedCaller) continue;
+      return rule.role;
+    }
+  }
+  return DEPARTMENT_SUGGESTED_ROLE[department] || null;
+}
 
 const WIZARD_STEPS = [
   { id: 1, label: 'Employee Information' },
@@ -59,30 +114,52 @@ export default function EmployeeForm() {
   // The step wizard only applies to creating a new employee — editing an
   // existing record is a single flat form, not an onboarding walkthrough.
   const [step, setStep] = useState(1);
-  // Once the CEO/HR deliberately picks a role from the dropdown, the
-  // department-based suggestion below must never silently overwrite it.
+  // Once the CEO/HR deliberately picks a role from the dropdown, auto-detect
+  // must never silently overwrite it again for the rest of this form session.
   const roleManuallySetRef = useRef(false);
+  // Whether this account's role is still at its untouched EMPLOYEE default —
+  // true for every new hire being created, and for an existing employee
+  // whose saved role is EMPLOYEE. False once an account genuinely has a
+  // real role (HR_ADMIN, MANAGER, …) that a human set on purpose — auto-
+  // detect never touches those, even if the designation is edited later.
+  const roleWasDefaultRef = useRef(true);
   // Drives the "Auto-detected" note under the role picker — true only when
-  // WE changed the selection (department match + role still at its
-  // untouched EMPLOYEE default), not when the account already had a role.
+  // WE changed the selection, not when the account already had a role.
   const [roleAutoSuggested, setRoleAutoSuggested] = useState(false);
+
+  // Re-runs the Designation/Department → Account Role detection. Called
+  // whenever either field changes, and once when an existing employee's
+  // data loads. Never touches a role the account already carries for real,
+  // or one the person filling out this form already picked by hand.
+  const recomputeRoleSuggestion = (department, designation) => {
+    if (roleManuallySetRef.current || !roleWasDefaultRef.current) return;
+    const suggested = computeSuggestedRole(department, designation, isElevated);
+    setRoleAutoSuggested(Boolean(suggested));
+    setForm((f) => ({ ...f, role: suggested || 'EMPLOYEE' }));
+  };
 
   useEffect(() => {
     const emp = data?.data?.data;
     if (!emp) return;
     const currentRole = emp.user?.role || 'EMPLOYEE';
-    const suggestedRole = DEPARTMENT_SUGGESTED_ROLE[emp.department];
     // This is the fix for "she's in the HR department but the system still
-    // treats her as a plain Employee": the account role never had anything
-    // driving it off department, so someone added to HR stayed capped at
-    // EMPLOYEE (and locked behind the onboarding-approval gate — see
-    // AuthContext.jsx `needsOnboarding`) until a human noticed and picked
-    // "HR Admin" by hand. Opening this employee's edit page now surfaces
-    // that mismatch immediately: the Account Role field is pre-set to the
-    // department's expected role instead of silently staying wrong.
-    const autoDetected = Boolean(suggestedRole) && currentRole === 'EMPLOYEE';
+    // treats her as a plain Employee" (and its follow-up — a Designation
+    // like "Sales Lead" or "Business Development Head" should get that
+    // person the matching access too): the account role never had anything
+    // driving it off Designation/Department, so someone added to HR (or
+    // given a lead/manager title) stayed capped at EMPLOYEE — and, for an
+    // EMPLOYEE role specifically, locked behind the onboarding-approval
+    // gate (see AuthContext.jsx `needsOnboarding`) — until a human noticed
+    // and picked the right role by hand. Opening this employee's edit page
+    // now surfaces that mismatch immediately: the Account Role field is
+    // pre-set to what their title/department implies instead of silently
+    // staying wrong.
+    roleWasDefaultRef.current = currentRole === 'EMPLOYEE';
+    const suggested = roleWasDefaultRef.current
+      ? computeSuggestedRole(emp.department, emp.designation, isElevated)
+      : null;
     roleManuallySetRef.current = false;
-    setRoleAutoSuggested(autoDetected);
+    setRoleAutoSuggested(Boolean(suggested));
     setForm({
       ...EMPTY_FORM,
       ...emp,
@@ -98,7 +175,7 @@ export default function EmployeeForm() {
       // Without this, the Account Role selector always fell back to the
       // EMPTY_FORM default of 'EMPLOYEE' while editing, even for someone
       // who was already HR_ADMIN.
-      role: autoDetected ? suggestedRole : currentRole,
+      role: suggested || currentRole,
       // Never pre-fill password boxes from a save — there is nothing to
       // show, and leaving these blank until the user actually types a new
       // password is what lets handleSubmit tell "no change" apart from
@@ -108,16 +185,15 @@ export default function EmployeeForm() {
     });
   }, [data]);
 
-  // Also auto-suggest live while creating/editing: switching the Department
-  // dropdown to HR pre-selects the matching Account Role, same rule as
-  // above (only while the role is still untouched at its default).
+  // Live auto-suggest while creating/editing: changing Department or typing
+  // a Designation (checked when you leave the field) re-runs the detection
+  // above, same "never touched by hand, never was a real role" guard.
   const handleDepartmentChange = (value) => {
-    setForm((f) => {
-      const suggestedRole = DEPARTMENT_SUGGESTED_ROLE[value];
-      const shouldSuggest = !roleManuallySetRef.current && suggestedRole && f.role === 'EMPLOYEE';
-      if (shouldSuggest) setRoleAutoSuggested(true);
-      return { ...f, department: value, role: shouldSuggest ? suggestedRole : f.role };
-    });
+    set('department', value);
+    recomputeRoleSuggestion(value, form.designation);
+  };
+  const handleDesignationBlur = () => {
+    recomputeRoleSuggestion(form.department, form.designation);
   };
 
   const createMut = useMutation({
@@ -364,7 +440,12 @@ export default function EmployeeForm() {
             <h3 className="section-title">Employment Information</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField label="Designation" required error={errors.designation}>
-                <input className="input" value={form.designation} onChange={(e) => set('designation', e.target.value)} />
+                <input
+                  className="input"
+                  value={form.designation}
+                  onChange={(e) => set('designation', e.target.value)}
+                  onBlur={handleDesignationBlur}
+                />
               </FormField>
               <FormField label="Department" required error={errors.department}>
                 <Select value={form.department} onChange={(e) => handleDepartmentChange(e.target.value)} options={DEPARTMENTS} placeholder="Select department" />
@@ -406,7 +487,7 @@ export default function EmployeeForm() {
                 <p className="mt-1 text-xs text-gray-400">Sets the login permissions for this employee.</p>
                 {roleAutoSuggested && (
                   <p className="mt-1 text-xs font-medium text-amber-600">
-                    Auto-detected from the HR department — this account was still capped at
+                    Auto-detected from the Designation/Department — this account was still capped at
                     Employee access. Review and save to apply.
                   </p>
                 )}
