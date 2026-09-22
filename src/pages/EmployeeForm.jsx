@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, FileText, Info, ShieldAlert, Eye, EyeOff } from 'lucide-react';
@@ -17,6 +17,16 @@ const EMPTY_FORM = {
   probationEndDate: '', confirmationDate: '', dateOfExit: '', exitReason: '', noticePeriodDays: '',
   workLocation: '', dateOfBirth: '', gender: '', bloodGroup: '', nationality: 'Indian', manager: '',
   password: '', confirmPassword: '',
+};
+
+// When someone is put into the HR department, they need HR module access to
+// do their job — that's what "she's in HR, why does the system treat her as
+// a plain Employee" comes down to. This is only ever a SUGGESTED starting
+// value for the Account Role dropdown (never silently applied): it pre-fills
+// the picker so the person saving the form can see and confirm it, but a
+// role the CEO/HR has deliberately chosen is never overwritten.
+const DEPARTMENT_SUGGESTED_ROLE = {
+  HR: 'HR_ADMIN',
 };
 
 const WIZARD_STEPS = [
@@ -49,10 +59,30 @@ export default function EmployeeForm() {
   // The step wizard only applies to creating a new employee — editing an
   // existing record is a single flat form, not an onboarding walkthrough.
   const [step, setStep] = useState(1);
+  // Once the CEO/HR deliberately picks a role from the dropdown, the
+  // department-based suggestion below must never silently overwrite it.
+  const roleManuallySetRef = useRef(false);
+  // Drives the "Auto-detected" note under the role picker — true only when
+  // WE changed the selection (department match + role still at its
+  // untouched EMPLOYEE default), not when the account already had a role.
+  const [roleAutoSuggested, setRoleAutoSuggested] = useState(false);
 
   useEffect(() => {
     const emp = data?.data?.data;
     if (!emp) return;
+    const currentRole = emp.user?.role || 'EMPLOYEE';
+    const suggestedRole = DEPARTMENT_SUGGESTED_ROLE[emp.department];
+    // This is the fix for "she's in the HR department but the system still
+    // treats her as a plain Employee": the account role never had anything
+    // driving it off department, so someone added to HR stayed capped at
+    // EMPLOYEE (and locked behind the onboarding-approval gate — see
+    // AuthContext.jsx `needsOnboarding`) until a human noticed and picked
+    // "HR Admin" by hand. Opening this employee's edit page now surfaces
+    // that mismatch immediately: the Account Role field is pre-set to the
+    // department's expected role instead of silently staying wrong.
+    const autoDetected = Boolean(suggestedRole) && currentRole === 'EMPLOYEE';
+    roleManuallySetRef.current = false;
+    setRoleAutoSuggested(autoDetected);
     setForm({
       ...EMPTY_FORM,
       ...emp,
@@ -68,7 +98,7 @@ export default function EmployeeForm() {
       // Without this, the Account Role selector always fell back to the
       // EMPTY_FORM default of 'EMPLOYEE' while editing, even for someone
       // who was already HR_ADMIN.
-      role: emp.user?.role || 'EMPLOYEE',
+      role: autoDetected ? suggestedRole : currentRole,
       // Never pre-fill password boxes from a save — there is nothing to
       // show, and leaving these blank until the user actually types a new
       // password is what lets handleSubmit tell "no change" apart from
@@ -77,6 +107,18 @@ export default function EmployeeForm() {
       confirmPassword: '',
     });
   }, [data]);
+
+  // Also auto-suggest live while creating/editing: switching the Department
+  // dropdown to HR pre-selects the matching Account Role, same rule as
+  // above (only while the role is still untouched at its default).
+  const handleDepartmentChange = (value) => {
+    setForm((f) => {
+      const suggestedRole = DEPARTMENT_SUGGESTED_ROLE[value];
+      const shouldSuggest = !roleManuallySetRef.current && suggestedRole && f.role === 'EMPLOYEE';
+      if (shouldSuggest) setRoleAutoSuggested(true);
+      return { ...f, department: value, role: shouldSuggest ? suggestedRole : f.role };
+    });
+  };
 
   const createMut = useMutation({
     mutationFn: (payload) => employeeAPI.create(payload),
@@ -325,7 +367,7 @@ export default function EmployeeForm() {
                 <input className="input" value={form.designation} onChange={(e) => set('designation', e.target.value)} />
               </FormField>
               <FormField label="Department" required error={errors.department}>
-                <Select value={form.department} onChange={(e) => set('department', e.target.value)} options={DEPARTMENTS} placeholder="Select department" />
+                <Select value={form.department} onChange={(e) => handleDepartmentChange(e.target.value)} options={DEPARTMENTS} placeholder="Select department" />
               </FormField>
             </div>
             {/*
@@ -343,7 +385,7 @@ export default function EmployeeForm() {
                 <select
                   className="input"
                   value={form.role}
-                  onChange={(e) => set('role', e.target.value)}
+                  onChange={(e) => { roleManuallySetRef.current = true; setRoleAutoSuggested(false); set('role', e.target.value); }}
                 >
                   <option value="EMPLOYEE">Employee</option>
                   <option value="MANAGER">Manager</option>
@@ -362,6 +404,12 @@ export default function EmployeeForm() {
                   )}
                 </select>
                 <p className="mt-1 text-xs text-gray-400">Sets the login permissions for this employee.</p>
+                {roleAutoSuggested && (
+                  <p className="mt-1 text-xs font-medium text-amber-600">
+                    Auto-detected from the HR department — this account was still capped at
+                    Employee access. Review and save to apply.
+                  </p>
+                )}
               </FormField>
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
