@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Phone, Mail, Building2, Upload, Search, RefreshCw, ChevronLeft, ChevronRight,
   BarChart3, Users, TrendingUp, Eye, Edit2, RotateCcw, AlertCircle, CheckCircle2,
-  Filter, X, Info, Calendar,
+  Filter, X, Info, Calendar, Trash2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { leadsAPI, employeeAPI } from '../api/axios';
@@ -34,6 +34,7 @@ function UploadSection({ onUploaded }) {
   const [file, setFile] = useState(null);
   const [step, setStep] = useState('select'); // select | preview | uploading | done
   const [preview, setPreview] = useState(null);
+  const [selectedState, setSelectedState] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
@@ -41,6 +42,7 @@ function UploadSection({ onUploaded }) {
     const f = e.target.files[0];
     setFile(f);
     setPreview(null);
+    setSelectedState('');
     setResult(null);
     setError('');
     setStep('select');
@@ -54,7 +56,11 @@ function UploadSection({ onUploaded }) {
       const form = new FormData();
       form.append('file', file);
       const res = await leadsAPI.preview(form);
-      setPreview(res.data.data);
+      const data = res.data.data;
+      setPreview(data);
+      // Pre-pick the state with the most rows so the common case (a file
+      // for one state) is a single click away — the admin can still change it.
+      setSelectedState(data.states?.[0]?.state || '');
       setStep('preview');
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Preview failed.');
@@ -63,16 +69,18 @@ function UploadSection({ onUploaded }) {
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file || !selectedState) return;
     setStep('uploading');
     setError('');
     try {
       const form = new FormData();
       form.append('file', file);
+      form.append('state', selectedState);
       const res = await leadsAPI.upload(form);
       setResult(res.data.data);
       setFile(null);
       setPreview(null);
+      setSelectedState('');
       setStep('done');
       onUploaded();
     } catch (err) {
@@ -81,12 +89,18 @@ function UploadSection({ onUploaded }) {
     }
   };
 
+  const selectedStateCount = preview?.states?.find((s) => s.state === selectedState)?.count || 0;
+
   return (
     <div className="card mb-6">
       <h2 className="mb-2 text-base font-semibold text-gray-800">Upload Leads File</h2>
       <p className="mb-4 text-sm text-gray-500">
-        Upload a <strong>CSV</strong> or <strong>Excel (.xlsx/.xls)</strong> file. Required column: <code className="rounded bg-gray-100 px-1 text-xs">name</code>.{' '}
-        Optional: phone, email, company, status, notes. Leads are distributed in <strong>50-lead rounds</strong> across active Sales employees.
+        Upload a <strong>CSV</strong> or <strong>Excel (.xlsx/.xls)</strong> file — even a raw, uncleaned export. Required column:{' '}
+        <code className="rounded bg-gray-100 px-1 text-xs">name</code> (a <code className="rounded bg-gray-100 px-1 text-xs">directorName</code>/
+        <code className="rounded bg-gray-100 px-1 text-xs">directorEmail</code> pair works too, and a row with no name at all but an email
+        gets a name derived from it). Optional: phone, email, company, state, status, notes.{' '}
+        Rows with a duplicate phone or email — within the file, or already imported earlier — are dropped automatically, and you'll pick
+        which state to import before anything is saved. Leads are distributed in <strong>{preview?.states ? '' : '50-lead '}rounds</strong> across active Sales employees.
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -107,9 +121,19 @@ function UploadSection({ onUploaded }) {
         {step === 'previewing' && <Spinner size="sm" />}
 
         {step === 'preview' && preview && (
-          <button onClick={handleUpload} className="btn-primary flex items-center gap-2">
-            <Upload className="h-4 w-4" /> Import & Distribute {preview.validRows} Leads
-          </button>
+          <>
+            <button onClick={handleUpload} disabled={!selectedState} className="btn-primary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">
+              <Upload className="h-4 w-4" />
+              {selectedState ? `Import & Distribute ${selectedStateCount} "${selectedState}" Lead${selectedStateCount !== 1 ? 's' : ''}` : 'Choose a state below to import'}
+            </button>
+            {/* Re-parses the same file from scratch and re-runs dedup/state-grouping
+                against whatever's in the database right now — use this if you're not
+                sure the numbers above reflect the current file/DB state (e.g. you
+                deleted a batch, or changed the file on disk and want a fresh read). */}
+            <button onClick={handlePreview} className="btn-secondary flex items-center gap-2" title="Re-parse the file and recompute these numbers from scratch">
+              <RefreshCw className="h-4 w-4" /> Re-scan File
+            </button>
+          </>
         )}
 
         {step === 'uploading' && (
@@ -127,27 +151,60 @@ function UploadSection({ onUploaded }) {
 
       {step === 'preview' && preview && (
         <div className="mt-4 rounded-lg bg-blue-50 border border-blue-200 p-4 text-sm">
-          <p className="font-semibold text-blue-800 mb-2 flex items-center gap-2"><Info className="h-4 w-4" /> Preview</p>
-          <div className="grid grid-cols-3 gap-2 text-center mb-3 sm:gap-4">
+          <p className="font-semibold text-blue-800 mb-2 flex items-center gap-2"><Info className="h-4 w-4" /> Preview — cleaned data</p>
+          <div className="grid grid-cols-2 gap-2 text-center mb-3 sm:grid-cols-5 sm:gap-3">
             <div className="rounded bg-white p-3 border border-blue-100">
               <div className="text-2xl font-bold text-blue-700">{preview.totalRows}</div>
               <div className="text-xs text-gray-500 mt-1">Total Rows</div>
             </div>
             <div className="rounded bg-white p-3 border border-green-100">
               <div className="text-2xl font-bold text-green-700">{preview.validRows}</div>
-              <div className="text-xs text-gray-500 mt-1">Valid Leads</div>
+              <div className="text-xs text-gray-500 mt-1">Clean Leads</div>
             </div>
             <div className="rounded bg-white p-3 border border-red-100">
               <div className="text-2xl font-bold text-red-700">{preview.invalidRows}</div>
-              <div className="text-xs text-gray-500 mt-1">Invalid / Skipped</div>
+              <div className="text-xs text-gray-500 mt-1">Invalid / No Name</div>
+            </div>
+            <div className="rounded bg-white p-3 border border-amber-100">
+              <div className="text-2xl font-bold text-amber-700">{preview.duplicateRows}</div>
+              <div className="text-xs text-gray-500 mt-1">Duplicates in File</div>
+            </div>
+            <div className="rounded bg-white p-3 border border-amber-100">
+              <div className="text-2xl font-bold text-amber-700">{preview.alreadyImportedRows}</div>
+              <div className="text-xs text-gray-500 mt-1">Already Imported</div>
             </div>
           </div>
+
+          {preview.states?.length > 0 && (
+            <div className="mb-3">
+              <p className="text-xs font-semibold text-blue-800 mb-1.5">Choose a state to import:</p>
+              <div className="flex flex-wrap gap-2">
+                {preview.states.map((s) => (
+                  <button
+                    key={s.state}
+                    type="button"
+                    onClick={() => setSelectedState(s.state)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${selectedState === s.state
+                        ? 'border-primary-600 bg-primary-600 text-white'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300 hover:bg-primary-50'
+                      }`}
+                  >
+                    {s.state} <span className={selectedState === s.state ? 'text-primary-100' : 'text-gray-400'}>({s.count})</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-gray-500">Only leads from the state you pick are imported — every other state's rows are left out.</p>
+            </div>
+          )}
+
           {preview.sample?.length > 0 && (
             <div>
-              <p className="text-xs text-gray-500 mb-1">Sample rows:</p>
+              <p className="text-xs text-gray-500 mb-1">Sample cleaned rows (name, phone, company, state):</p>
               <ul className="text-xs text-gray-700 space-y-0.5">
                 {preview.sample.map((r, i) => (
-                  <li key={i} className="truncate">• {r.name}{r.company ? ` — ${r.company}` : ''}{r.phone ? ` (${r.phone})` : ''}</li>
+                  <li key={i} className="truncate">
+                    • {r.name}{r.company ? ` — ${r.company}` : ''}{r.phone ? ` · ${r.phone}` : ''}{r.state ? ` · ${r.state}` : ''}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -161,7 +218,12 @@ function UploadSection({ onUploaded }) {
             <CheckCircle2 className="h-4 w-4" /> {result.message}
           </p>
           <p className="text-xs text-green-700">Batch ID: <code className="font-mono">{result.uploadBatch}</code> · Batch size: {result.batchSize} leads/round</p>
-          {result.skipped > 0 && <p className="text-green-700 mt-1">{result.skipped} rows skipped.</p>}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-green-700">
+            {result.skipped > 0 && <span>{result.skipped} row(s) had no usable name and were skipped.</span>}
+            {result.duplicatesRemoved > 0 && <span>{result.duplicatesRemoved} duplicate row(s) in the file were skipped.</span>}
+            {result.alreadyImportedExcluded > 0 && <span>{result.alreadyImportedExcluded} row(s) were already in the system.</span>}
+            {result.otherStateExcluded > 0 && <span>{result.otherStateExcluded} row(s) from other states were excluded.</span>}
+          </div>
           {result.distribution?.length > 0 && (
             <div className="mt-3">
               <p className="text-xs font-semibold text-green-700 mb-1">Distribution:</p>
@@ -555,10 +617,10 @@ function MiniCalendar({ selectedDate, onSelectDate, onClose }) {
                 onClose();
               }}
               className={`h-7 w-7 rounded-full text-xs font-medium flex items-center justify-center transition-all ${isSelected
-                  ? 'bg-primary-600 text-white font-semibold shadow-sm'
-                  : isToday
-                    ? 'border border-primary-500 text-primary-600 hover:bg-primary-50'
-                    : 'text-gray-700 hover:bg-gray-100'
+                ? 'bg-primary-600 text-white font-semibold shadow-sm'
+                : isToday
+                  ? 'border border-primary-500 text-primary-600 hover:bg-primary-50'
+                  : 'text-gray-700 hover:bg-gray-100'
                 }`}
             >
               {item.day}
@@ -657,6 +719,7 @@ export default function SalesLeads() {
   const calendarRef = useRef(null);
   const [batchFilter, setBatchFilter] = useState('');
   const [batches, setBatches] = useState([]);
+  const [deletingBatch, setDeletingBatch] = useState(false);
   const [activeTab, setActiveTab] = useState('leads'); // leads | stats
   const [statusModal, setStatusModal] = useState(null);
   const [reassignModal, setReassignModal] = useState(null);
@@ -704,13 +767,43 @@ export default function SalesLeads() {
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
-  useEffect(() => {
+  const fetchBatches = useCallback(() => {
     if (canUpload) {
       leadsAPI.batches().then(r => setBatches(r.data.data || [])).catch(() => { });
     }
   }, [canUpload]);
 
+  useEffect(() => { fetchBatches(); }, [fetchBatches]);
+
   const handleSearch = (e) => { setSearch(e.target.value); setPage(1); };
+
+  // Permanently removes every lead imported in one batch — the way to
+  // clear out test/accidental uploads (e.g. leads imported while testing,
+  // or before duplicate/state filtering was fixed) so a re-upload of the
+  // same file isn't silently excluded as "already imported". Requires
+  // picking a batch from the dropdown first; asks for a typed confirmation
+  // since this cannot be undone.
+  const handleDeleteBatch = async () => {
+    if (!batchFilter) return;
+    const batchMeta = batches.find(b => b.batchId === batchFilter);
+    const count = batchMeta?.total ?? 'these';
+    const typed = window.prompt(
+      `This permanently deletes all ${count} lead(s) in batch "${batchFilter}" — including any status/notes sales has already added. This cannot be undone.\n\nType DELETE to confirm.`
+    );
+    if (typed !== 'DELETE') return;
+
+    setDeletingBatch(true);
+    try {
+      await leadsAPI.deleteBatch(batchFilter);
+      setBatchFilter('');
+      setPage(1);
+      await Promise.all([fetchLeads(), fetchBatches()]);
+    } catch (err) {
+      window.alert(err.response?.data?.error?.message || 'Failed to delete batch.');
+    } finally {
+      setDeletingBatch(false);
+    }
+  };
 
   return (
     <div>
@@ -739,7 +832,7 @@ export default function SalesLeads() {
         }
       />
 
-      {canUpload && <UploadSection onUploaded={fetchLeads} />}
+      {canUpload && <UploadSection onUploaded={() => { fetchLeads(); fetchBatches(); }} />}
       {isMgmt && activeTab === 'stats' && <StatsDashboard />}
 
       {(activeTab === 'leads' || !isMgmt) && (
@@ -824,12 +917,26 @@ export default function SalesLeads() {
               )}
             </div>
             {canUpload && batches.length > 0 && (
-              <select className="form-input w-52" value={batchFilter} onChange={e => { setBatchFilter(e.target.value); setPage(1); }}>
-                <option value="">All Batches</option>
-                {batches.map(b => (
-                  <option key={b.batchId} value={b.batchId}>{b.batchId} ({b.total})</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-1">
+                <select className="form-input w-52" value={batchFilter} onChange={e => { setBatchFilter(e.target.value); setPage(1); }}>
+                  <option value="">All Batches</option>
+                  {batches.map(b => (
+                    <option key={b.batchId} value={b.batchId}>{b.batchId} ({b.total})</option>
+                  ))}
+                </select>
+                {/* Clears out a batch entirely — e.g. leads imported for a test/
+                    demo, or before this fix, that you want gone before re-testing
+                    the same file (otherwise they're excluded as "already imported"). */}
+                <button
+                  type="button"
+                  onClick={handleDeleteBatch}
+                  disabled={!batchFilter || deletingBatch}
+                  className="btn-secondary !p-2 text-red-600 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  title={batchFilter ? `Permanently delete all leads in batch "${batchFilter}"` : 'Select a batch first'}
+                >
+                  {deletingBatch ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </button>
+              </div>
             )}
             <button onClick={fetchLeads} className="btn-secondary flex items-center gap-2">
               <RefreshCw className="h-4 w-4" /> Refresh
