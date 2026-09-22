@@ -827,6 +827,34 @@ export default function SalesLeads() {
     }
   };
 
+  // Leads only ever get handed out at the moment a file is imported, split
+  // across whoever was an active Sales/Business Development employee AT
+  // THAT MOMENT — someone who joined afterward is never retroactively
+  // included and stays at zero leads (with every filter cleared) until
+  // either a new file is imported or this runs. This re-splits every
+  // existing lead evenly across the CURRENT active team.
+  const [rebalancing, setRebalancing] = useState(false);
+  const handleRebalance = async () => {
+    const confirmed = window.confirm(
+      'This re-splits every lead evenly across the current active Sales/Business Development team. ' +
+      'Leads currently assigned to other reps may move to someone new (e.g. a recent hire who never got any). ' +
+      'Existing status, notes and history on each lead are kept — only who it\'s assigned to changes.\n\n' +
+      'Continue?'
+    );
+    if (!confirmed) return;
+
+    setRebalancing(true);
+    try {
+      const res = await leadsAPI.rebalance();
+      window.alert(res.data.data?.message || 'Leads rebalanced.');
+      await Promise.all([fetchLeads(), fetchBatches()]);
+    } catch (err) {
+      window.alert(err.response?.data?.error?.message || 'Failed to rebalance leads.');
+    } finally {
+      setRebalancing(false);
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -959,6 +987,18 @@ export default function SalesLeads() {
                   {deletingBatch ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 </button>
               </div>
+            )}
+            {isMgmt && (
+              <button
+                type="button"
+                onClick={handleRebalance}
+                disabled={rebalancing}
+                className="btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Re-split every lead evenly across the current active Sales/Business Development team — use this after hiring someone new to the sales team so they get leads without waiting for the next import."
+              >
+                {rebalancing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                Rebalance across team
+              </button>
             )}
             <button onClick={fetchLeads} className="btn-secondary flex items-center gap-2">
               <RefreshCw className="h-4 w-4" /> Refresh

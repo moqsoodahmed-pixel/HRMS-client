@@ -338,6 +338,10 @@ export const leadsAPI = {
   get: (id) => api.get(`/leads/${id}`),
   updateStatus: (id, data) => api.patch(`/leads/${id}/status`, data),
   reassign: (id, data) => api.patch(`/leads/${id}/assign`, data),
+  // Re-splits every lead evenly across the CURRENTLY active Sales/Business
+  // Development team — for when someone joined the team after the last
+  // file import and so never received any leads in that round-robin.
+  rebalance: () => api.post('/leads/rebalance'),
   stats: (params) => api.get('/leads/stats', { params: clean(params) }),
   batches: () => api.get('/leads/batches'),
   deleteBatch: (batch) => api.delete(`/leads/batch/${encodeURIComponent(batch)}`),
