@@ -27,7 +27,7 @@ import { COMPANY_NAME } from '../constants';
 // Mirrors UNDO_CHECKOUT_GRACE_MINUTES on the server (attendanceController.js) —
 // only used here to show/hide the "Undo check-out" button and its countdown;
 // the server is the source of truth and will reject an undo past its own window.
-const UNDO_CHECKOUT_GRACE_MINUTES = 10;
+const UNDO_CHECKOUT_GRACE_MINUTES = 1;
 
 export default function Dashboard() {
   const { role } = useAuth();
@@ -912,10 +912,12 @@ function EmployeeDashboard() {
   const queryClient = useQueryClient();
   const displayName = employee?.fullName || user?.email?.split('@')[0];
   const [confirmingCheckOut, setConfirmingCheckOut] = useState(false);
-  // Ticks every 15s purely to re-render the "Undo check-out" countdown/visibility.
+  // Ticks every second purely to re-render the "Undo check-out" countdown/
+  // visibility — the window is short (1 minute), so a coarser tick would make
+  // the button disappear up to several seconds later than it should.
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNowTick(Date.now()), 15000);
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -989,7 +991,7 @@ function EmployeeDashboard() {
   const checkOutAt = myToday?.record?.checkOut ? new Date(myToday.record.checkOut).getTime() : null;
   const undoCheckOutDeadline = checkOutAt ? checkOutAt + UNDO_CHECKOUT_GRACE_MINUTES * 60000 : null;
   const canUndoCheckOut = Boolean(undoCheckOutDeadline) && nowTick < undoCheckOutDeadline;
-  const undoCheckOutMinutesLeft = canUndoCheckOut ? Math.max(1, Math.ceil((undoCheckOutDeadline - nowTick) / 60000)) : 0;
+  const undoCheckOutSecondsLeft = canUndoCheckOut ? Math.max(1, Math.ceil((undoCheckOutDeadline - nowTick) / 1000)) : 0;
 
   const totalAvailable = balances.reduce((sum, b) => sum + (b.remainingDays || 0), 0);
   const totalUsed = balances.reduce((sum, b) => sum + (b.usedDays || 0), 0);
@@ -1032,7 +1034,7 @@ function EmployeeDashboard() {
             </button>
             {canUndoCheckOut && (
               <button type="button" className="btn-secondary" onClick={() => undoCheckOut.mutate()} disabled={undoCheckOut.isPending}>
-                <RotateCcw className="h-4 w-4" /> {undoCheckOut.isPending ? 'Undoing…' : `Undo check-out (${undoCheckOutMinutesLeft}m left)`}
+                <RotateCcw className="h-4 w-4" /> {undoCheckOut.isPending ? 'Undoing…' : `Undo check-out (${undoCheckOutSecondsLeft}s left)`}
               </button>
             )}
           </div>
@@ -1046,7 +1048,7 @@ function EmployeeDashboard() {
             <p>This records your check-out time as <strong>{formatTime(new Date())}</strong>. Make sure you're actually done for the day — an early check-out affects today's work-hours calculation.</p>
           </div>
           <p className="text-xs text-gray-500">
-            Clicked by mistake? You'll have {UNDO_CHECKOUT_GRACE_MINUTES} minutes after checking out to undo it yourself from this page. After that, you'll need to submit an attendance correction request.
+            Clicked by mistake? You'll have {UNDO_CHECKOUT_GRACE_MINUTES} minute{UNDO_CHECKOUT_GRACE_MINUTES === 1 ? '' : 's'} after checking out to undo it yourself from this page. After that, you'll need to submit an attendance correction request.
           </p>
           <div className="flex justify-end gap-3">
             <button type="button" className="btn-secondary" onClick={() => setConfirmingCheckOut(false)}>Cancel</button>
