@@ -32,7 +32,12 @@ const PERMISSIONS = {
   viewTeamFilters: ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
   // Payroll
   viewPayroll: ['HR_ADMIN', 'FINANCE', 'DIRECTOR'],
-  managePayroll: ['FINANCE'],
+  // HR administers day-to-day payroll (salary structures, generating/
+  // reissuing payslips) alongside Finance — matches the server's
+  // PAYROLL_WRITE_ROLES (utils/roles.js). Changing what someone's pay rate
+  // actually IS still goes through the separate compensation request/
+  // approval workflow below, which HR still cannot approve on its own.
+  managePayroll: ['FINANCE', 'HR_ADMIN'],
   requestCompensationChange: ['HR_ADMIN'],
   viewCompensationRequests: ['HR_ADMIN', 'FINANCE', 'DIRECTOR'],
   approveCompensationChange: [],
