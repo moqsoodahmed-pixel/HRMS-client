@@ -325,6 +325,12 @@ export const auditAPI = {
   filters: () => api.get('/audit/filters'),
 };
 
+// Read-only DB counts — the app-side alternative to direct MongoDB Atlas
+// access (see diagnosticsController.js).
+export const diagnosticsAPI = {
+  dataHealth: () => api.get('/diagnostics/data-health'),
+};
+
 export const notificationAPI = {
   list: (params) => api.get('/notifications', { params: clean(params) }),
   markRead: (id) => api.patch(`/notifications/${id}/read`),

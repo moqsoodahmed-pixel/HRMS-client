@@ -4,6 +4,7 @@ import {
   Megaphone, Package, UserPlus, UserMinus, BarChart3, ScrollText, X,
   ClipboardCheck, GraduationCap, TrendingUp, LogOut as ExitIcon, Lock,
   Building2, Settings as SettingsIcon, PhoneCall, ClipboardList, FileSignature,
+  Database,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { COMPANY_NAME } from '../constants';
@@ -68,6 +69,9 @@ const ADMIN_NAV_GROUPS = [
       { label: 'Onboarding Checklist', to: '/onboarding', icon: UserPlus },
       { label: 'Reports', to: '/reports', icon: BarChart3 },
       { label: 'Audit Logs', to: '/audit', icon: ScrollText },
+      // Read-only DB counts — the app-side alternative to opening MongoDB
+      // Atlas directly. See DataHealth.jsx / diagnosticsController.js.
+      { label: 'Data Health Check', to: '/diagnostics', icon: Database },
     ],
   },
   { type: 'item', label: 'Settings', to: '/settings', icon: SettingsIcon },
@@ -80,12 +84,11 @@ function NavItemLink({ item, locked, onClose, indent }) {
       onClick={onClose}
       title={locked ? 'Complete onboarding to unlock this module' : undefined}
       className={({ isActive }) =>
-        `flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition ${indent ? 'pl-9 pr-3' : 'px-3'} ${
-          locked
-            ? 'cursor-not-allowed text-gray-400 hover:bg-transparent'
-            : isActive
-              ? 'bg-primary-600 text-white shadow-sm'
-              : 'text-gray-600 hover:bg-gray-100'
+        `flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition ${indent ? 'pl-9 pr-3' : 'px-3'} ${locked
+          ? 'cursor-not-allowed text-gray-400 hover:bg-transparent'
+          : isActive
+            ? 'bg-primary-600 text-white shadow-sm'
+            : 'text-gray-600 hover:bg-gray-100'
         }`
       }
     >

@@ -84,6 +84,9 @@ export const ROUTE_ACCESS = {
   '/reports': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'AUDITOR', 'DIRECTOR', 'IT_HEAD'],
   '/audit': ['AUDITOR', 'DIRECTOR'],
   '/settings': [],
+  // Elevated only (FOUNDER_CEO/CTO/SUPER_ADMIN) — matches the server's
+  // authorize() on GET /diagnostics/data-health.
+  '/diagnostics': [],
   '/onboarding/me': null,
   '/training': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
   '/performance': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],

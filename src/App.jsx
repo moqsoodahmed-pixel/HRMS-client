@@ -32,6 +32,7 @@ import Performance from './pages/Performance';
 import ExitProcess from './pages/ExitProcess';
 import Reports from './pages/Reports';
 import AuditLogs from './pages/AuditLogs';
+import DataHealth from './pages/DataHealth';
 import Settings from './pages/Settings';
 import SalesLeads from './pages/SalesLeads';
 import DailyReports from './pages/DailyReports';
@@ -112,6 +113,7 @@ function AppRoutes() {
       <Route path="/exit" element={<Private access="/exit"><ExitProcess /></Private>} />
       <Route path="/reports" element={<Private access="/reports"><Reports /></Private>} />
       <Route path="/audit" element={<Private access="/audit"><AuditLogs /></Private>} />
+      <Route path="/diagnostics" element={<Private access="/diagnostics"><DataHealth /></Private>} />
       <Route path="/settings" element={<Private access="/settings"><Settings /></Private>} />
 
       {/* New modules */}
