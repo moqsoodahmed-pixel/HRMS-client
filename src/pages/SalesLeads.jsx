@@ -7,6 +7,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { leadsAPI, employeeAPI } from '../api/axios';
 import { PageHeader, Spinner, EmptyState, LoadingBlock } from '../components/ui';
+import { errorMessage } from '../lib/format';
 
 const STATUS_COLORS = {
   NEW: 'bg-blue-100 text-blue-700',
@@ -185,8 +186,8 @@ function UploadSection({ onUploaded }) {
                     type="button"
                     onClick={() => setSelectedState(s.state)}
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${selectedState === s.state
-                        ? 'border-primary-600 bg-primary-600 text-white'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300 hover:bg-primary-50'
+                      ? 'border-primary-600 bg-primary-600 text-white'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300 hover:bg-primary-50'
                       }`}
                   >
                     {s.state} <span className={selectedState === s.state ? 'text-primary-100' : 'text-gray-400'}>({s.count})</span>
@@ -393,8 +394,19 @@ function ReassignModal({ lead, onClose, onUpdated }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    employeeAPI.list({ department: 'Sales', status: 'ACTIVE', limit: 100 })
-      .then(r => setEmployees(r.data.data || []))
+    // GET /employees only matches department by exact string, so Sales and
+    // Business Development (see constants.js DEPARTMENTS, and the matching
+    // pool in leadController.js distributeLeads()) are fetched separately
+    // and merged — otherwise a Business Development employee could never
+    // be picked as a reassignment target even though they can receive
+    // leads through the normal round-robin import.
+    Promise.all([
+      employeeAPI.list({ department: 'Sales', status: 'ACTIVE', limit: 100 }),
+      employeeAPI.list({ department: 'Business Development', status: 'ACTIVE', limit: 100 }),
+    ])
+      .then(([salesRes, bizDevRes]) => {
+        setEmployees([...(salesRes.data.data || []), ...(bizDevRes.data.data || [])]);
+      })
       .catch(() => { });
   }, []);
 
@@ -711,6 +723,12 @@ export default function SalesLeads() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  // Surfaced when GET /leads itself fails (403/500/network) — previously
+  // this was only console.error()'d and the list silently stayed empty, so
+  // a real failure (e.g. the onboarding-approval gate that used to sit on
+  // this route) rendered as an indistinguishable "No leads found", making a
+  // genuine access problem look like "there's just nothing here."
+  const [listError, setListError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [leadDateFilter, setLeadDateFilter] = useState(''); // '' (All Leads) | 'TODAY' | 'PREVIOUS'
@@ -745,6 +763,7 @@ export default function SalesLeads() {
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
+    setListError('');
     try {
       const params = { page, limit: LIMIT };
       if (search) params.search = search;
@@ -760,6 +779,9 @@ export default function SalesLeads() {
       setTotal(res.data.meta?.total || 0);
     } catch (err) {
       console.error(err);
+      setLeads([]);
+      setTotal(0);
+      setListError(errorMessage(err, 'Could not load leads.'));
     } finally {
       setLoading(false);
     }
@@ -947,6 +969,12 @@ export default function SalesLeads() {
           <div className="card overflow-hidden">
             {loading ? (
               <LoadingBlock />
+            ) : listError ? (
+              <EmptyState
+                icon={AlertCircle}
+                title="Could not load leads"
+                description={listError}
+              />
             ) : leads.length === 0 ? (
               <EmptyState title="No leads found" description="Try adjusting your filters or upload a new file." />
             ) : (

@@ -8,7 +8,15 @@ export const COMPANY_NAME = 'DutyLaunch Solutions Private Limited';
 
 export const DEPARTMENTS = [
   'Management', 'Engineering', 'Finance', 'Operations', 'HR',
-  'Sales', 'Marketing', 'IT', 'Legal', 'Design',
+  // 'Business Development' sits next to 'Sales' on purpose: AuthContext.jsx
+  // canAccess() already treats any department containing "sales" or
+  // "business development" as Sales-Leads-accessible (it was written ahead
+  // of this department actually being selectable here), and
+  // leadController.js distributeLeads() now pulls its round-robin pool from
+  // both departments too — so an employee placed in Business Development
+  // gets the same Sales Leads access and lead assignments a Sales employee
+  // does, without any further code changes.
+  'Sales', 'Business Development', 'Marketing', 'IT', 'Legal', 'Design',
 ];
 
 // FOUNDER_CEO and CTO carry identical, full effective permissions (see
