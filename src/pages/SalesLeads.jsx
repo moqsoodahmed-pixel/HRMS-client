@@ -761,6 +761,12 @@ export default function SalesLeads() {
   const LIMIT = 50;
   const totalPages = Math.ceil(total / LIMIT);
 
+  // Badge count for the self-service "New Leads" tab below — kept accurate
+  // regardless of whatever status filter is currently applied to the main
+  // list, so the tab can show "you have 4 unworked leads" even while
+  // they're looking at, say, everything they've already CONTACTED.
+  const [newLeadsCount, setNewLeadsCount] = useState(0);
+
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     setListError('');
@@ -777,6 +783,16 @@ export default function SalesLeads() {
       const res = await leadsAPI.list(params);
       setLeads(res.data.data || []);
       setTotal(res.data.meta?.total || 0);
+      if (!isMgmt) {
+        if (statusFilter === 'NEW') {
+          // Already fetched exactly this above — no need for a second call.
+          setNewLeadsCount(res.data.meta?.total || 0);
+        } else {
+          leadsAPI.list({ status: 'NEW', limit: 1 })
+            .then((r) => setNewLeadsCount(r.data.meta?.total || 0))
+            .catch(() => { });
+        }
+      }
     } catch (err) {
       console.error(err);
       setLeads([]);
@@ -785,7 +801,7 @@ export default function SalesLeads() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, leadDateFilter, customDate, batchFilter]);
+  }, [page, search, statusFilter, leadDateFilter, customDate, batchFilter, isMgmt]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
@@ -875,6 +891,36 @@ export default function SalesLeads() {
                   className={`btn-secondary flex items-center gap-2 ${activeTab === 'stats' ? 'bg-primary-50 text-primary-700' : ''}`}
                 >
                   <BarChart3 className="h-4 w-4" /> Dashboard
+                </button>
+              </>
+            )}
+            {/*
+              Self-service "New Leads" tab — a highlighted shortcut to just-
+              assigned, unworked leads (status NEW), separate from the
+              default view so nothing already in progress (CONTACTED,
+              INTERESTED, etc.) gets hidden by default. Clicking either
+              button just sets the existing status filter, so it stays in
+              sync with the dropdown below (picking "New" there highlights
+              this tab too, and vice versa).
+            */}
+            {!isMgmt && (
+              <>
+                <button
+                  onClick={() => { setStatusFilter(''); setPage(1); }}
+                  className={`btn-secondary flex items-center gap-2 ${statusFilter === '' ? 'bg-primary-50 text-primary-700' : ''}`}
+                >
+                  All Leads
+                </button>
+                <button
+                  onClick={() => { setStatusFilter('NEW'); setPage(1); }}
+                  className={`btn-secondary flex items-center gap-2 ${statusFilter === 'NEW' ? 'bg-primary-50 text-primary-700' : ''}`}
+                >
+                  New Leads
+                  {newLeadsCount > 0 && (
+                    <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-primary-600 px-1.5 py-0.5 text-xs font-semibold text-white">
+                      {newLeadsCount}
+                    </span>
+                  )}
                 </button>
               </>
             )}
