@@ -39,11 +39,25 @@ function UploadSection({ onUploaded }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
+  // Manual "who gets this batch" override, shown right after Preview.
+  // Empty selection (default) = unchanged behaviour: auto-split across the
+  // whole active Sales/Business Development team. Picking one person = solo
+  // (everything in this batch goes to them). Picking a few = the round-robin
+  // is scoped to just that hand-picked group instead of the whole team.
+  const [assignees, setAssignees] = useState([]); // active Sales/BD employees, fetched once Preview succeeds
+  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState([]);
+  const [assigneesLoading, setAssigneesLoading] = useState(false);
+
+  const toggleAssignee = (id) => {
+    setSelectedAssigneeIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
   const handleFileChange = (e) => {
     const f = e.target.files[0];
     setFile(f);
     setPreview(null);
     setSelectedState('');
+    setSelectedAssigneeIds([]);
     setResult(null);
     setError('');
     setStep('select');
@@ -63,6 +77,20 @@ function UploadSection({ onUploaded }) {
       // for one state) is a single click away — the admin can still change it.
       setSelectedState(data.states?.[0]?.state || '');
       setStep('preview');
+
+      // Fetch who this batch COULD be assigned to, right away, so the
+      // "assign to" picker is ready the instant Preview finishes — no
+      // separate click needed to load the employee list.
+      setAssigneesLoading(true);
+      Promise.all([
+        employeeAPI.list({ department: 'Sales', status: 'ACTIVE', limit: 100 }),
+        employeeAPI.list({ department: 'Business Development', status: 'ACTIVE', limit: 100 }),
+      ])
+        .then(([salesRes, bizDevRes]) => {
+          setAssignees([...(salesRes.data.data || []), ...(bizDevRes.data.data || [])]);
+        })
+        .catch(() => { })
+        .finally(() => setAssigneesLoading(false));
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Preview failed.');
       setStep('select');
@@ -77,11 +105,19 @@ function UploadSection({ onUploaded }) {
       const form = new FormData();
       form.append('file', file);
       form.append('state', selectedState);
+      // Only send an override when the admin actually picked someone —
+      // an empty selection means "leave it to the normal auto-split",
+      // which is exactly what omitting the field does server-side.
+      if (selectedAssigneeIds.length > 0) {
+        form.append('employeeIds', JSON.stringify(selectedAssigneeIds));
+      }
       const res = await leadsAPI.upload(form);
       setResult(res.data.data);
       setFile(null);
       setPreview(null);
       setSelectedState('');
+      setSelectedAssigneeIds([]);
+      setAssignees([]);
       setStep('done');
       onUploaded();
     } catch (err) {
@@ -91,6 +127,9 @@ function UploadSection({ onUploaded }) {
   };
 
   const selectedStateCount = preview?.states?.find((s) => s.state === selectedState)?.count || 0;
+  const selectedAssigneeNames = assignees
+    .filter((a) => selectedAssigneeIds.includes(a._id))
+    .map((a) => a.fullName);
 
   return (
     <div className="card mb-6">
@@ -125,7 +164,11 @@ function UploadSection({ onUploaded }) {
           <>
             <button onClick={handleUpload} disabled={!selectedState} className="btn-primary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">
               <Upload className="h-4 w-4" />
-              {selectedState ? `Import & Distribute ${selectedStateCount} "${selectedState}" Lead${selectedStateCount !== 1 ? 's' : ''}` : 'Choose a state below to import'}
+              {!selectedState
+                ? 'Choose a state below to import'
+                : selectedAssigneeIds.length > 0
+                  ? `Import & Assign ${selectedStateCount} "${selectedState}" Lead${selectedStateCount !== 1 ? 's' : ''} to ${selectedAssigneeIds.length} Chosen Employee${selectedAssigneeIds.length !== 1 ? 's' : ''}`
+                  : `Import & Distribute ${selectedStateCount} "${selectedState}" Lead${selectedStateCount !== 1 ? 's' : ''}`}
             </button>
             {/* Re-parses the same file from scratch and re-runs dedup/state-grouping
                 against whatever's in the database right now — use this if you're not
@@ -198,6 +241,57 @@ function UploadSection({ onUploaded }) {
             </div>
           )}
 
+          {/*
+            Manual "assign to" override — shown as soon as Preview succeeds,
+            right next to the state picker. Leaving it empty keeps the old
+            behaviour (auto-split across the whole active Sales/Business
+            Development team). Checking one person sends the whole batch to
+            them solo; checking a few scopes the round-robin to just that
+            hand-picked group instead of everyone.
+          */}
+          <div className="mb-3 border-t border-blue-100 pt-3">
+            <p className="text-xs font-semibold text-blue-800 mb-1.5">
+              Assign to (optional — leave empty to auto-split across the whole team):
+            </p>
+            {assigneesLoading ? (
+              <p className="text-xs text-gray-500 flex items-center gap-1.5"><Spinner size="sm" /> Loading sales team…</p>
+            ) : assignees.length === 0 ? (
+              <p className="text-xs text-gray-500">No active Sales/Business Development employees found.</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {assignees.map((emp) => {
+                    const checked = selectedAssigneeIds.includes(emp._id);
+                    return (
+                      <label
+                        key={emp._id}
+                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium cursor-pointer transition-colors ${checked
+                          ? 'border-primary-600 bg-primary-600 text-white'
+                          : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300 hover:bg-primary-50'
+                          }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={checked}
+                          onChange={() => toggleAssignee(emp._id)}
+                        />
+                        {emp.fullName} <span className={checked ? 'text-primary-100' : 'text-gray-400'}>({emp.employeeCode})</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-xs text-gray-500">
+                  {selectedAssigneeIds.length === 0
+                    ? 'Nobody selected — this batch will auto-split across all active Sales/Business Development employees, as usual.'
+                    : selectedAssigneeIds.length === 1
+                      ? `Solo assignment — every imported lead goes to ${selectedAssigneeNames[0]}.`
+                      : `Scoped round-robin — imported leads will be split only between: ${selectedAssigneeNames.join(', ')}.`}
+                </p>
+              </>
+            )}
+          </div>
+
           {preview.sample?.length > 0 && (
             <div>
               <p className="text-xs text-gray-500 mb-1">Sample cleaned rows (name, phone, company, state):</p>
@@ -227,7 +321,9 @@ function UploadSection({ onUploaded }) {
           </div>
           {result.distribution?.length > 0 && (
             <div className="mt-3">
-              <p className="text-xs font-semibold text-green-700 mb-1">Distribution:</p>
+              <p className="text-xs font-semibold text-green-700 mb-1">
+                {result.manuallyAssigned ? 'Manually assigned to:' : 'Distribution:'}
+              </p>
               <div className="space-y-1">
                 {result.distribution.map((d, i) => (
                   <div key={i} className="flex justify-between text-xs bg-white/60 rounded px-2 py-1">
