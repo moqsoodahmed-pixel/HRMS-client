@@ -142,17 +142,58 @@ export const WORKDAY_HOURS = 8;
 export const PAID_BREAK_HOURS = 1;
 
 /**
- * The actual clock time someone checking in NOW should expect to check out
- * — computed from their REAL check-in timestamp for today, not a generic
- * static string. Returns null once they've already checked out (the real
- * check-out time is shown instead at that point) or if there's no check-in
- * yet.
+ * Minutes actually spent on break so far, from real breakStart/breakEnd
+ * timestamps — live (counts up to `now`) while on break, frozen once
+ * breakEnd is recorded, 0 before a break has started.
  */
-export function expectedCheckOutTime(checkIn) {
+export function breakMinutesTaken(breakStart, breakEnd, now = Date.now()) {
+  if (!breakStart) return 0;
+  const start = new Date(breakStart).getTime();
+  if (Number.isNaN(start)) return 0;
+  const end = breakEnd ? new Date(breakEnd).getTime() : now;
+  if (Number.isNaN(end) || end < start) return 0;
+  return Math.floor((end - start) / 60000);
+}
+
+/** `1h 12m` / `40m` from real break timestamps — null before a break starts. */
+export function formatBreakDuration(breakStart, breakEnd, now = Date.now()) {
+  if (!breakStart) return null;
+  const mins = breakMinutesTaken(breakStart, breakEnd, now);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+}
+
+// Matches the server's break-deduction rule (attendanceController.js
+// recomputeDerivedFields): the org's standard break is a guaranteed FLOOR,
+// not a cap. Coming back early still costs the full standard break — a
+// short lunch is not a way to earn an early check-out. Running the break
+// long costs the actual (larger) time instead, straight out of net working
+// hours — that overage is on record, and the only way to still hit the
+// day's target is to stay later and work it off, not have it forgiven.
+export function effectiveBreakMinutes(breakStart, breakEnd, now = Date.now()) {
+  const standard = PAID_BREAK_HOURS * 60;
+  if (!breakStart) return standard;
+  return Math.max(breakMinutesTaken(breakStart, breakEnd, now), standard);
+}
+
+/**
+ * The actual clock time someone checking in NOW should expect to check out
+ * — computed from their REAL check-in timestamp for today (not a generic
+ * static string), and adjusted live for any break overage: a break longer
+ * than the standard 1 hour pushes this later by exactly the extra minutes
+ * taken, so the expected check-out reflects that time has to be made up.
+ * A short/no break never pulls it earlier. Returns null once they've
+ * already checked out (the real check-out time is shown instead) or if
+ * there's no check-in yet. `breakStart`/`breakEnd` are optional — omitting
+ * them keeps the original fixed-9-hours behaviour for existing callers.
+ */
+export function expectedCheckOutTime(checkIn, breakStart = null, breakEnd = null, now = Date.now()) {
   if (!checkIn) return null;
   const start = new Date(checkIn).getTime();
   if (Number.isNaN(start)) return null;
-  const end = new Date(start + (WORKDAY_HOURS + PAID_BREAK_HOURS) * 3600000);
+  const breakMins = effectiveBreakMinutes(breakStart, breakEnd, now);
+  const end = new Date(start + WORKDAY_HOURS * 3600000 + breakMins * 60000);
   return end.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 

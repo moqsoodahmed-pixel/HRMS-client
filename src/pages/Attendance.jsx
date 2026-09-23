@@ -15,7 +15,8 @@ import {
 } from '../components/ui';
 import { ATTENDANCE_STATUSES, DEPARTMENTS } from '../constants';
 import {
-  formatDate, formatTime, toDateInput, toTimeInput, errorMessage, fieldErrors, duration, exportCsv, expectedCheckOutTime,
+  formatDate, formatTime, toDateInput, toTimeInput, errorMessage, fieldErrors, duration, exportCsv,
+  expectedCheckOutTime, formatBreakDuration, breakMinutesTaken, effectiveBreakMinutes, PAID_BREAK_HOURS,
 } from '../lib/format';
 
 const PAGE_SIZE = 20;
@@ -115,11 +116,24 @@ function SelfAttendanceWidget({ title = 'Today' }) {
   if (!myToday?.employee) return null;
 
   // Dynamic expected check-out clock time, computed from the REAL check-in
-  // timestamp the moment it happens (8 work hours + the 1 hour paid break
-  // = 9 hours on site) — not a fixed/generic string. Recomputes itself
-  // automatically whenever check-in changes, and stops being shown once
-  // the actual check-out is recorded (the real time is shown instead).
-  const expectedOut = !myToday.record?.checkOut ? expectedCheckOutTime(myToday.record?.checkIn) : null;
+  // timestamp the moment it happens (8 work hours + the paid break = 9
+  // hours on site by default) — not a fixed/generic string. It also reacts
+  // live to the actual break taken: coming back early never pulls it
+  // earlier (the standard break is a floor, not a cap — no reward for
+  // cutting lunch short), but a break that runs past the standard hour
+  // pushes it later by exactly the overage, since that time has to be
+  // made up rather than forgiven. Recomputes every second via nowTick, and
+  // stops being shown once the actual check-out is recorded.
+  const expectedOut = !myToday.record?.checkOut
+    ? expectedCheckOutTime(myToday.record?.checkIn, myToday.record?.breakStart, myToday.record?.breakEnd, nowTick)
+    : null;
+  // Live break duration actually taken so far (from real breakStart/
+  // breakEnd timestamps) — replaces the old fixed "1 hr deducted" label,
+  // which never changed no matter how long the break actually ran.
+  const breakTakenLabel = formatBreakDuration(myToday.record?.breakStart, myToday.record?.breakEnd, nowTick);
+  const breakOverMinutes = myToday.record?.breakStart
+    ? Math.max(0, breakMinutesTaken(myToday.record.breakStart, myToday.record.breakEnd, nowTick) - PAID_BREAK_HOURS * 60)
+    : 0;
 
   return (
     <div className="card p-5">
@@ -187,7 +201,21 @@ function SelfAttendanceWidget({ title = 'Today' }) {
       {myToday.record?.checkIn && (
         <div className="mt-4 rounded-lg bg-amber-50 border border-amber-100 px-4 py-2 text-xs text-amber-800 flex flex-wrap gap-x-6 gap-y-1">
           <span>⏱ <strong>Gross time:</strong> {myToday.record?.checkOut ? `${myToday.record.workHours?.toFixed(2) ?? '—'} h` : duration(myToday.record.checkIn)}</span>
-          <span>☕ <strong>Break:</strong> 1 hr deducted</span>
+          {/* Shows the break actually taken (live while on break), not a fixed
+              "1 hr" label — matches the server's floor-not-cap rule: at least
+              1 hr is always deducted, and a break run past that deducts the
+              real, larger amount instead. */}
+          <span>
+            ☕ <strong>Break:</strong>{' '}
+            {breakTakenLabel
+              ? <>{breakTakenLabel} taken{!myToday.record?.breakEnd ? ' (on break…)' : ''} · {effectiveBreakMinutes(myToday.record?.breakStart, myToday.record?.breakEnd, nowTick)} min deducted</>
+              : `${PAID_BREAK_HOURS} hr deducted (standard)`}
+          </span>
+          {breakOverMinutes > 0 && (
+            <span className="text-red-700">
+              ⚠ <strong>{breakOverMinutes} min over</strong> the {PAID_BREAK_HOURS} hr break — counts against today's net hours, make it up before check-out
+            </span>
+          )}
           {myToday.record?.netWorkHours != null && (
             <span>✅ <strong>Net working hours:</strong> {myToday.record.netWorkHours.toFixed(2)} h (target: 8.00 h)</span>
           )}
