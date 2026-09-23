@@ -118,12 +118,11 @@ function SelfAttendanceWidget({ title = 'Today' }) {
   // Dynamic expected check-out clock time, computed from the REAL check-in
   // timestamp the moment it happens (8 work hours + the paid break = 9
   // hours on site by default) — not a fixed/generic string. It also reacts
-  // live to the actual break taken: coming back early never pulls it
-  // earlier (the standard break is a floor, not a cap — no reward for
-  // cutting lunch short), but a break that runs past the standard hour
-  // pushes it later by exactly the overage, since that time has to be
-  // made up rather than forgiven. Recomputes every second via nowTick, and
-  // stops being shown once the actual check-out is recorded.
+  // live to the ACTUAL break taken, symmetrically: break out early and this
+  // pulls earlier by the time saved (they're free to check out that much
+  // sooner — check-out was never gated on net hours), break long and it
+  // pushes later by the overage instead. Recomputes every second via
+  // nowTick, and stops being shown once the actual check-out is recorded.
   const expectedOut = !myToday.record?.checkOut
     ? expectedCheckOutTime(myToday.record?.checkIn, myToday.record?.breakStart, myToday.record?.breakEnd, nowTick)
     : null;
@@ -131,8 +130,11 @@ function SelfAttendanceWidget({ title = 'Today' }) {
   // breakEnd timestamps) — replaces the old fixed "1 hr deducted" label,
   // which never changed no matter how long the break actually ran.
   const breakTakenLabel = formatBreakDuration(myToday.record?.breakStart, myToday.record?.breakEnd, nowTick);
-  const breakOverMinutes = myToday.record?.breakStart
-    ? Math.max(0, breakMinutesTaken(myToday.record.breakStart, myToday.record.breakEnd, nowTick) - PAID_BREAK_HOURS * 60)
+  // How the actual break compares to the standard 1 hr — positive means
+  // running long (checkout pushed later), negative means back early
+  // (checkout pulled earlier by the same amount), 0 means right on the mark.
+  const breakDeltaMinutes = myToday.record?.breakStart
+    ? breakMinutesTaken(myToday.record.breakStart, myToday.record.breakEnd, nowTick) - PAID_BREAK_HOURS * 60
     : 0;
 
   return (
@@ -202,18 +204,22 @@ function SelfAttendanceWidget({ title = 'Today' }) {
         <div className="mt-4 rounded-lg bg-amber-50 border border-amber-100 px-4 py-2 text-xs text-amber-800 flex flex-wrap gap-x-6 gap-y-1">
           <span>⏱ <strong>Gross time:</strong> {myToday.record?.checkOut ? `${myToday.record.workHours?.toFixed(2) ?? '—'} h` : duration(myToday.record.checkIn)}</span>
           {/* Shows the break actually taken (live while on break), not a fixed
-              "1 hr" label — matches the server's floor-not-cap rule: at least
-              1 hr is always deducted, and a break run past that deducts the
-              real, larger amount instead. */}
+              "1 hr" label — matches the server's rule: the real break
+              duration is what's deducted, in both directions. */}
           <span>
             ☕ <strong>Break:</strong>{' '}
             {breakTakenLabel
               ? <>{breakTakenLabel} taken{!myToday.record?.breakEnd ? ' (on break…)' : ''} · {effectiveBreakMinutes(myToday.record?.breakStart, myToday.record?.breakEnd, nowTick)} min deducted</>
-              : `${PAID_BREAK_HOURS} hr deducted (standard)`}
+              : `${PAID_BREAK_HOURS} hr deducted (standard, until you start a break)`}
           </span>
-          {breakOverMinutes > 0 && (
-            <span className="text-red-700">
-              ⚠ <strong>{breakOverMinutes} min over</strong> the {PAID_BREAK_HOURS} hr break — counts against today's net hours, make it up before check-out
+          {breakDeltaMinutes > 0 && (
+            <span className="text-amber-700">
+              ⏳ <strong>{breakDeltaMinutes} min longer</strong> than the {PAID_BREAK_HOURS} hr break — check-out pushed {breakDeltaMinutes} min later
+            </span>
+          )}
+          {breakDeltaMinutes < 0 && (
+            <span className="text-green-700">
+              ⚡ <strong>{-breakDeltaMinutes} min shorter</strong> than the {PAID_BREAK_HOURS} hr break — free to check out {-breakDeltaMinutes} min earlier
             </span>
           )}
           {myToday.record?.netWorkHours != null && (

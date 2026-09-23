@@ -165,25 +165,27 @@ export function formatBreakDuration(breakStart, breakEnd, now = Date.now()) {
 }
 
 // Matches the server's break-deduction rule (attendanceController.js
-// recomputeDerivedFields): the org's standard break is a guaranteed FLOOR,
-// not a cap. Coming back early still costs the full standard break — a
-// short lunch is not a way to earn an early check-out. Running the break
-// long costs the actual (larger) time instead, straight out of net working
-// hours — that overage is on record, and the only way to still hit the
-// day's target is to stay later and work it off, not have it forgiven.
+// recomputeDerivedFields): the deduction is the ACTUAL break duration taken
+// — symmetric both ways. Break out early (say 35 min instead of the
+// standard 60) and the deduction is the real 35, which pulls the expected
+// check-out earlier by the same 25 min — they're free to check out that
+// much sooner, the check-out button was never gated on net hours anyway.
+// Run the break long (say 72 min) and the deduction is the real 72, which
+// pushes the expected check-out later by the 12-minute overage instead.
+// Before any break is started at all, the org's standard break is used as
+// the day's baseline assumption (unchanged from before).
 export function effectiveBreakMinutes(breakStart, breakEnd, now = Date.now()) {
   const standard = PAID_BREAK_HOURS * 60;
   if (!breakStart) return standard;
-  return Math.max(breakMinutesTaken(breakStart, breakEnd, now), standard);
+  return breakMinutesTaken(breakStart, breakEnd, now);
 }
 
 /**
  * The actual clock time someone checking in NOW should expect to check out
  * — computed from their REAL check-in timestamp for today (not a generic
- * static string), and adjusted live for any break overage: a break longer
- * than the standard 1 hour pushes this later by exactly the extra minutes
- * taken, so the expected check-out reflects that time has to be made up.
- * A short/no break never pulls it earlier. Returns null once they've
+ * static string), and adjusted live to the ACTUAL break duration taken: a
+ * shorter break pulls this earlier (they can check out that much sooner), a
+ * longer break pushes it later by the overage. Returns null once they've
  * already checked out (the real check-out time is shown instead) or if
  * there's no check-in yet. `breakStart`/`breakEnd` are optional — omitting
  * them keeps the original fixed-9-hours behaviour for existing callers.
