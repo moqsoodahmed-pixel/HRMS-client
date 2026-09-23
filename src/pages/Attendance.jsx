@@ -15,7 +15,7 @@ import {
 } from '../components/ui';
 import { ATTENDANCE_STATUSES, DEPARTMENTS } from '../constants';
 import {
-  formatDate, formatTime, toDateInput, toTimeInput, errorMessage, fieldErrors, duration, exportCsv,
+  formatDate, formatTime, toDateInput, toTimeInput, errorMessage, fieldErrors, duration, exportCsv, expectedCheckOutTime,
 } from '../lib/format';
 
 const PAGE_SIZE = 20;
@@ -42,30 +42,32 @@ export default function Attendance() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Employee self-service view (unchanged behaviour, reused check-in)   */
+/* Self-service check-in/out/break widget — shared by the plain        */
+/* employee "My Attendance" view AND, further below, surfaced to HR    */
+/* Admin too. HR previously never saw this at all: the top-level       */
+/* Attendance() router sends anyone with the "viewAllAttendance"       */
+/* permission (which includes HR_ADMIN) straight to                    */
+/* AttendanceManagementView instead, on the assumption that anyone who */
+/* manages everyone else's attendance doesn't need their own — but HR  */
+/* is still an employee who checks in/out and takes a break like       */
+/* anyone else. Extracted into its own component so both views render */
+/* the exact same check-in/out/break behaviour rather than keeping two */
+/* copies in sync by hand.                                             */
 /* ------------------------------------------------------------------ */
 
-function MyAttendanceView() {
+function SelfAttendanceWidget({ title = 'Today' }) {
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState({ date: today(), status: '' });
-  const [page, setPage] = useState(1);
-  const [requesting, setRequesting] = useState(false);
   const [confirmingCheckOut, setConfirmingCheckOut] = useState(false);
-  // Ticks every 15s purely to re-render the "Undo check-out" countdown/visibility.
+  // Ticks every second so the live "worked so far" duration below, and the
+  // "Undo check-out" countdown, stay in sync with the actual clock without
+  // needing a page refresh.
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const listQuery = useQuery({
-    queryKey: ['attendance', 'list', filters, page],
-    queryFn: () => attendanceAPI.list({ ...filters, page, limit: PAGE_SIZE }),
-    placeholderData: keepPreviousData,
-  });
   const todayQuery = useQuery({ queryKey: ['attendance', 'today'], queryFn: () => attendanceAPI.today() });
-  const records = listQuery.data?.data?.data || [];
-  const meta = listQuery.data?.data?.meta;
   const myToday = todayQuery.data?.data?.data;
 
   const refreshAll = () => {
@@ -110,6 +112,132 @@ function MyAttendanceView() {
     onError: (err) => toast.error(errorMessage(err)),
   });
 
+  if (!myToday?.employee) return null;
+
+  // Dynamic expected check-out clock time, computed from the REAL check-in
+  // timestamp the moment it happens (8 work hours + the 1 hour paid break
+  // = 9 hours on site) — not a fixed/generic string. Recomputes itself
+  // automatically whenever check-in changes, and stops being shown once
+  // the actual check-out is recorded (the real time is shown instead).
+  const expectedOut = !myToday.record?.checkOut ? expectedCheckOutTime(myToday.record?.checkIn) : null;
+
+  return (
+    <div className="card p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600"><Clock className="h-6 w-6" /></div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{title}</p>
+            <p className="text-xs text-gray-500">Shift {myToday.shift?.start} – {myToday.shift?.end} · {formatDate(new Date())}</p>
+            {expectedOut ? (
+              <p className="text-xs font-medium text-primary-700 mt-0.5">
+                Expected check-out: {expectedOut} <span className="font-normal text-gray-400">(8h work + 1h paid break, from your {formatTime(myToday.record?.checkIn)} check-in)</span>
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 mt-0.5">Includes 1 hr paid break · 8 hrs counted = 9 hrs on site</p>
+            )}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
+          <MiniStat label="Status" value={myToday.record ? <StatusBadge status={myToday.record.status} /> : <span className="text-sm text-gray-400">Not marked</span>} />
+          <MiniStat label="Check in" value={<span className="text-sm font-medium">{formatTime(myToday.record?.checkIn)}</span>} />
+          <MiniStat
+            label={myToday.record?.checkOut ? 'Check out' : 'Working'}
+            value={<span className="text-sm font-medium">{myToday.record?.checkOut ? formatTime(myToday.record.checkOut) : myToday.record?.checkIn ? duration(myToday.record.checkIn) : '—'}</span>}
+          />
+          <MiniStat
+            label="Break"
+            value={
+              myToday.record?.breakStart && myToday.record?.breakEnd
+                ? <span className="text-sm font-medium text-green-600">{formatTime(myToday.record.breakStart)} – {formatTime(myToday.record.breakEnd)}</span>
+                : myToday.record?.breakStart && !myToday.record?.breakEnd
+                  ? <span className="text-sm font-medium text-amber-600 animate-pulse">On break…</span>
+                  : <span className="text-sm text-gray-400">Not started</span>
+            }
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-primary" onClick={() => checkIn.mutate()} disabled={checkIn.isPending || Boolean(myToday.record?.checkIn)}>
+            <LogIn className="h-4 w-4" /> Check in
+          </button>
+          {/* Break start — only after check-in, before check-out, and break not yet taken */}
+          {!myToday.record?.breakStart && myToday.record?.checkIn && !myToday.record?.checkOut && (
+            <button type="button" className="btn-secondary" onClick={() => breakStart.mutate()} disabled={breakStart.isPending}>
+              <Coffee className="h-4 w-4" /> Start break
+            </button>
+          )}
+          {/* Break end — only while on break */}
+          {myToday.record?.breakStart && !myToday.record?.breakEnd && (
+            <button type="button" className="btn-secondary" onClick={() => breakEnd.mutate()} disabled={breakEnd.isPending}>
+              <Coffee className="h-4 w-4" /> End break
+            </button>
+          )}
+          <button type="button" className="btn-secondary" onClick={() => setConfirmingCheckOut(true)} disabled={checkOut.isPending || !myToday.record?.checkIn || Boolean(myToday.record?.checkOut)}>
+            <LogOut className="h-4 w-4" /> Check out
+          </button>
+          {canUndoCheckOut && (
+            <button type="button" className="btn-secondary" onClick={() => undoCheckOut.mutate()} disabled={undoCheckOut.isPending}>
+              <RotateCcw className="h-4 w-4" /> {undoCheckOut.isPending ? 'Undoing…' : `Undo check-out (${undoCheckOutSecondsLeft}s left)`}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Net hours info bar */}
+      {myToday.record?.checkIn && (
+        <div className="mt-4 rounded-lg bg-amber-50 border border-amber-100 px-4 py-2 text-xs text-amber-800 flex flex-wrap gap-x-6 gap-y-1">
+          <span>⏱ <strong>Gross time:</strong> {myToday.record?.checkOut ? `${myToday.record.workHours?.toFixed(2) ?? '—'} h` : duration(myToday.record.checkIn)}</span>
+          <span>☕ <strong>Break:</strong> 1 hr deducted</span>
+          {myToday.record?.netWorkHours != null && (
+            <span>✅ <strong>Net working hours:</strong> {myToday.record.netWorkHours.toFixed(2)} h (target: 8.00 h)</span>
+          )}
+        </div>
+      )}
+
+      <Modal open={confirmingCheckOut} onClose={() => setConfirmingCheckOut(false)} title="Confirm check-out" size="sm">
+        <div className="space-y-4 p-5">
+          <div className="flex gap-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-sm text-amber-800">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+            <p>This records your check-out time as <strong>{formatTime(new Date())}</strong>. Make sure you're actually done for the day — an early check-out affects today's work-hours calculation.</p>
+          </div>
+          <p className="text-xs text-gray-500">
+            Clicked by mistake? You'll have {UNDO_CHECKOUT_GRACE_MINUTES} minute{UNDO_CHECKOUT_GRACE_MINUTES === 1 ? '' : 's'} after checking out to undo it yourself from this page. After that, you'll need to submit an attendance correction request.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button type="button" className="btn-secondary" onClick={() => setConfirmingCheckOut(false)}>Cancel</button>
+            <button type="button" className="btn-primary" disabled={checkOut.isPending} onClick={() => checkOut.mutate()}>
+              {checkOut.isPending ? 'Checking out…' : 'Yes, check out'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Employee self-service view (unchanged behaviour, reused check-in)   */
+/* ------------------------------------------------------------------ */
+
+function MyAttendanceView() {
+  const queryClient = useQueryClient();
+  const [filters, setFilters] = useState({ date: today(), status: '' });
+  const [page, setPage] = useState(1);
+  const [requesting, setRequesting] = useState(false);
+
+  const listQuery = useQuery({
+    queryKey: ['attendance', 'list', filters, page],
+    queryFn: () => attendanceAPI.list({ ...filters, page, limit: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
+  });
+  const records = listQuery.data?.data?.data || [];
+  const meta = listQuery.data?.data?.meta;
+
+  const refreshAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['attendance'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  };
+
   return (
     <div>
       <PageHeader
@@ -122,74 +250,7 @@ function MyAttendanceView() {
         }
       />
 
-      {myToday?.employee && (
-        <div className="card p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600"><Clock className="h-6 w-6" /></div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Today</p>
-                <p className="text-xs text-gray-500">Shift {myToday.shift?.start} – {myToday.shift?.end} · {formatDate(new Date())}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Includes 1 hr paid break · 8 hrs counted = 9 hrs on site</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
-              <MiniStat label="Status" value={myToday.record ? <StatusBadge status={myToday.record.status} /> : <span className="text-sm text-gray-400">Not marked</span>} />
-              <MiniStat label="Check in" value={<span className="text-sm font-medium">{formatTime(myToday.record?.checkIn)}</span>} />
-              <MiniStat
-                label={myToday.record?.checkOut ? 'Check out' : 'Working'}
-                value={<span className="text-sm font-medium">{myToday.record?.checkOut ? formatTime(myToday.record.checkOut) : myToday.record?.checkIn ? duration(myToday.record.checkIn) : '—'}</span>}
-              />
-              <MiniStat
-                label="Break"
-                value={
-                  myToday.record?.breakStart && myToday.record?.breakEnd
-                    ? <span className="text-sm font-medium text-green-600">{formatTime(myToday.record.breakStart)} – {formatTime(myToday.record.breakEnd)}</span>
-                    : myToday.record?.breakStart && !myToday.record?.breakEnd
-                      ? <span className="text-sm font-medium text-amber-600 animate-pulse">On break…</span>
-                      : <span className="text-sm text-gray-400">Not started</span>
-                }
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn-primary" onClick={() => checkIn.mutate()} disabled={checkIn.isPending || Boolean(myToday.record?.checkIn)}>
-                <LogIn className="h-4 w-4" /> Check in
-              </button>
-              {/* Break start — only after check-in, before check-out, and break not yet taken */}
-              {!myToday.record?.breakStart && myToday.record?.checkIn && !myToday.record?.checkOut && (
-                <button type="button" className="btn-secondary" onClick={() => breakStart.mutate()} disabled={breakStart.isPending}>
-                  <Coffee className="h-4 w-4" /> Start break
-                </button>
-              )}
-              {/* Break end — only while on break */}
-              {myToday.record?.breakStart && !myToday.record?.breakEnd && (
-                <button type="button" className="btn-secondary" onClick={() => breakEnd.mutate()} disabled={breakEnd.isPending}>
-                  <Coffee className="h-4 w-4" /> End break
-                </button>
-              )}
-              <button type="button" className="btn-secondary" onClick={() => setConfirmingCheckOut(true)} disabled={checkOut.isPending || !myToday.record?.checkIn || Boolean(myToday.record?.checkOut)}>
-                <LogOut className="h-4 w-4" /> Check out
-              </button>
-              {canUndoCheckOut && (
-                <button type="button" className="btn-secondary" onClick={() => undoCheckOut.mutate()} disabled={undoCheckOut.isPending}>
-                  <RotateCcw className="h-4 w-4" /> {undoCheckOut.isPending ? 'Undoing…' : `Undo check-out (${undoCheckOutSecondsLeft}s left)`}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Net hours info bar */}
-          {myToday.record?.checkIn && (
-            <div className="mt-4 rounded-lg bg-amber-50 border border-amber-100 px-4 py-2 text-xs text-amber-800 flex flex-wrap gap-x-6 gap-y-1">
-              <span>⏱ <strong>Gross time:</strong> {myToday.record?.checkOut ? `${myToday.record.workHours?.toFixed(2) ?? '—'} h` : duration(myToday.record.checkIn)}</span>
-              <span>☕ <strong>Break:</strong> 1 hr deducted</span>
-              {myToday.record?.netWorkHours != null && (
-                <span>✅ <strong>Net working hours:</strong> {myToday.record.netWorkHours.toFixed(2)} h (target: 8.00 h)</span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      <SelfAttendanceWidget />
 
       <div className="mt-6">
         <FilterBar onReset={() => { setFilters({ date: today(), status: '' }); setPage(1); }}>
@@ -221,24 +282,6 @@ function MyAttendanceView() {
       </div>
 
       <RequestModal open={requesting} onClose={() => setRequesting(false)} onSaved={refreshAll} />
-
-      <Modal open={confirmingCheckOut} onClose={() => setConfirmingCheckOut(false)} title="Confirm check-out" size="sm">
-        <div className="space-y-4 p-5">
-          <div className="flex gap-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-sm text-amber-800">
-            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-            <p>This records your check-out time as <strong>{formatTime(new Date())}</strong>. Make sure you're actually done for the day — an early check-out affects today's work-hours calculation.</p>
-          </div>
-          <p className="text-xs text-gray-500">
-            Clicked by mistake? You'll have {UNDO_CHECKOUT_GRACE_MINUTES} minute{UNDO_CHECKOUT_GRACE_MINUTES === 1 ? '' : 's'} after checking out to undo it yourself from this page. After that, you'll need to submit an attendance correction request.
-          </p>
-          <div className="flex justify-end gap-3">
-            <button type="button" className="btn-secondary" onClick={() => setConfirmingCheckOut(false)}>Cancel</button>
-            <button type="button" className="btn-primary" disabled={checkOut.isPending} onClick={() => checkOut.mutate()}>
-              {checkOut.isPending ? 'Checking out…' : 'Yes, check out'}
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
@@ -324,6 +367,7 @@ function RequestModal({ open, onClose, onSaved }) {
 /* ------------------------------------------------------------------ */
 
 function AttendanceManagementView() {
+  const { role } = useAuth();
   const [tab, setTab] = useState('submissions');
   const [week, setWeek] = useState(() => toDateInput(new Date()));
   const range = weekRangeOf(week);
@@ -354,6 +398,12 @@ function AttendanceManagementView() {
   return (
     <div>
       <PageHeader title="Employee Attendance" subtitle="Dashboard / Attendance / Employee records" />
+
+      {/* HR is also an employee with their own shift to work — this view used
+          to only manage OTHER people's attendance and had no way for HR
+          themselves to check in/out or take a break. Reuses the same
+          self-service widget every other employee gets on this page. */}
+      {role === 'HR_ADMIN' && <SelfAttendanceWidget title="My attendance today" />}
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>

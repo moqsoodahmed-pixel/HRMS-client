@@ -135,6 +135,27 @@ export function duration(from, to) {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 }
 
+// Matches the paid-shift math already described in the UI copy ("Includes
+// 1 hr paid break · 8 hrs counted = 9 hrs on site") — 8 working hours plus
+// the 1 hour paid break someone actually spends on site.
+export const WORKDAY_HOURS = 8;
+export const PAID_BREAK_HOURS = 1;
+
+/**
+ * The actual clock time someone checking in NOW should expect to check out
+ * — computed from their REAL check-in timestamp for today, not a generic
+ * static string. Returns null once they've already checked out (the real
+ * check-out time is shown instead at that point) or if there's no check-in
+ * yet.
+ */
+export function expectedCheckOutTime(checkIn) {
+  if (!checkIn) return null;
+  const start = new Date(checkIn).getTime();
+  if (Number.isNaN(start)) return null;
+  const end = new Date(start + (WORKDAY_HOURS + PAID_BREAK_HOURS) * 3600000);
+  return end.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
 /** Whole days between two `YYYY-MM-DD` values, inclusive. Returns 0 when invalid. */
 export function daysBetween(start, end) {
   if (!start || !end) return 0;
