@@ -459,6 +459,84 @@ function ReassignModal({ lead, onClose, onUpdated }) {
   );
 }
 
+// ── Bulk Assign Modal ─────────────────────────────────────────────────────
+// Lets CEO/Admin hand-pick which sales employee a SET of selected leads
+// goes to, instead of the automatic round-robin split ("Rebalance across
+// team" does the auto-split; this is the manual-choice alternative).
+function BulkAssignModal({ leadIds, onClose, onUpdated }) {
+  const [employees, setEmployees] = useState([]);
+  const [employeeId, setEmployeeId] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    // Same Sales + Business Development merge as ReassignModal — GET
+    // /employees only matches department by exact string.
+    Promise.all([
+      employeeAPI.list({ department: 'Sales', status: 'ACTIVE', limit: 100 }),
+      employeeAPI.list({ department: 'Business Development', status: 'ACTIVE', limit: 100 }),
+    ])
+      .then(([salesRes, bizDevRes]) => {
+        setEmployees([...(salesRes.data.data || []), ...(bizDevRes.data.data || [])]);
+      })
+      .catch(() => { });
+  }, []);
+
+  const handleSave = async () => {
+    if (!employeeId) { setError('Please select an employee.'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const res = await leadsAPI.bulkAssign({ leadIds, employeeId, reason });
+      window.alert(res.data.data?.message || `Assigned ${leadIds.length} lead(s).`);
+      onUpdated();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'Failed to assign leads.');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <h2 className="text-base font-semibold">Assign {leadIds.length} Lead{leadIds.length !== 1 ? 's' : ''}</h2>
+          <button onClick={onClose}><X className="h-5 w-5 text-gray-400 hover:text-gray-600" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-sm text-gray-500">
+            Choose exactly who these {leadIds.length} selected lead{leadIds.length !== 1 ? 's' : ''} should go to.
+            Existing status, notes and history on each lead are kept — only who it's assigned to changes.
+          </p>
+          <div>
+            <label className="form-label">Assign to Sales Employee</label>
+            <select className="form-input" value={employeeId} onChange={e => setEmployeeId(e.target.value)}>
+              <option value="">Select employee…</option>
+              {employees.map(emp => (
+                <option key={emp._id} value={emp._id}>{emp.fullName} ({emp.employeeCode})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="form-label">Reason (optional)</label>
+            <input className="form-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for this assignment…" />
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4">
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2">
+            {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
+            Assign {leadIds.length} Lead{leadIds.length !== 1 ? 's' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Lead History Modal ─────────────────────────────────────────────────────
 function LeadHistoryModal({ leadId, onClose }) {
   const [lead, setLead] = useState(null);
@@ -742,6 +820,25 @@ export default function SalesLeads() {
   const [statusModal, setStatusModal] = useState(null);
   const [reassignModal, setReassignModal] = useState(null);
   const [historyModal, setHistoryModal] = useState(null);
+  // Manual bulk-assign — checkbox selection of leads on the CURRENT page,
+  // cleared whenever the underlying list changes (page/filters/refresh) so
+  // a stale selection can never be applied to a different set of leads.
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkAssignModal, setBulkAssignModal] = useState(false);
+  const toggleSelected = (leadId) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId); else next.add(leadId);
+      return next;
+    });
+  };
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds(prev => {
+      const allSelected = leads.length > 0 && leads.every(l => prev.has(l._id));
+      if (allSelected) return new Set();
+      return new Set(leads.map(l => l._id));
+    });
+  };
 
   // Close calendar popover on outside click
   useEffect(() => {
@@ -804,6 +901,10 @@ export default function SalesLeads() {
   }, [page, search, statusFilter, leadDateFilter, customDate, batchFilter, isMgmt]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
+  // A stale selection pointing at leads from a different page/filter would
+  // silently reassign the wrong leads, so drop it any time the list itself
+  // is about to change underneath it.
+  useEffect(() => { setSelectedIds(new Set()); }, [page, search, statusFilter, leadDateFilter, customDate, batchFilter]);
 
   const fetchBatches = useCallback(() => {
     if (canUpload) {
@@ -1046,6 +1147,18 @@ export default function SalesLeads() {
                 Rebalance across team
               </button>
             )}
+            {isMgmt && (
+              <button
+                type="button"
+                onClick={() => setBulkAssignModal(true)}
+                disabled={selectedIds.size === 0}
+                className="btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-40"
+                title={selectedIds.size === 0 ? 'Select leads below using the checkboxes first' : `Manually choose who gets these ${selectedIds.size} lead(s), instead of auto-splitting`}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Assign selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+              </button>
+            )}
             <button onClick={fetchLeads} className="btn-secondary flex items-center gap-2">
               <RefreshCw className="h-4 w-4" /> Refresh
             </button>
@@ -1068,6 +1181,16 @@ export default function SalesLeads() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                      {isMgmt && (
+                        <th className="px-4 py-3 text-left w-8">
+                          <input
+                            type="checkbox"
+                            checked={leads.length > 0 && leads.every(l => selectedIds.has(l._id))}
+                            onChange={toggleSelectAllOnPage}
+                            title="Select all on this page"
+                          />
+                        </th>
+                      )}
                       {canSeeRowNumber && <th className="px-4 py-3 text-left">No.</th>}
                       <th className="px-4 py-3 text-left">Lead</th>
                       <th className="px-4 py-3 text-left">Contact</th>
@@ -1081,6 +1204,15 @@ export default function SalesLeads() {
                   <tbody className="divide-y divide-gray-100">
                     {leads.map((lead, idx) => (
                       <tr key={lead._id} className="hover:bg-gray-50 transition-colors">
+                        {isMgmt && (
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(lead._id)}
+                              onChange={() => toggleSelected(lead._id)}
+                            />
+                          </td>
+                        )}
                         {canSeeRowNumber && (
                           <td className="px-4 py-3 text-xs text-gray-500 font-medium">{(page - 1) * LIMIT + idx + 1}</td>
                         )}
@@ -1205,6 +1337,13 @@ export default function SalesLeads() {
       )}
       {reassignModal && (
         <ReassignModal lead={reassignModal} onClose={() => setReassignModal(null)} onUpdated={fetchLeads} />
+      )}
+      {bulkAssignModal && (
+        <BulkAssignModal
+          leadIds={Array.from(selectedIds)}
+          onClose={() => setBulkAssignModal(false)}
+          onUpdated={() => { setSelectedIds(new Set()); fetchLeads(); }}
+        />
       )}
       {historyModal && (
         <LeadHistoryModal leadId={historyModal} onClose={() => setHistoryModal(null)} />

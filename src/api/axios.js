@@ -348,6 +348,9 @@ export const leadsAPI = {
   // Development team — for when someone joined the team after the last
   // file import and so never received any leads in that round-robin.
   rebalance: () => api.post('/leads/rebalance'),
+  // Manual assignment — CEO/Admin picks exactly which sales employee a
+  // chosen set of leads goes to, instead of the automatic round-robin split.
+  bulkAssign: (data) => api.post('/leads/bulk-assign', data),
   stats: (params) => api.get('/leads/stats', { params: clean(params) }),
   batches: () => api.get('/leads/batches'),
   deleteBatch: (batch) => api.delete(`/leads/batch/${encodeURIComponent(batch)}`),
