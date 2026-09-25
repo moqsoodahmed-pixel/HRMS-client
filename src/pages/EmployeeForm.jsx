@@ -479,7 +479,10 @@ export default function EmployeeForm() {
                   onChange={(e) => { roleManuallySetRef.current = true; setRoleAutoSuggested(false); set('role', e.target.value); }}
                 >
                   <option value="EMPLOYEE">Employee</option>
-                  <option value="MANAGER">Manager</option>
+                  {/* In Sales / Business Development, the Manager role IS the
+                      Sales Team Lead — show that name so HR sees the option
+                      explicitly when they pick the Sales department. */}
+                  <option value="MANAGER">{isSalesTeamLead('MANAGER', form.department) ? 'Sales Team Lead' : 'Manager'}</option>
                   <option value="HR_ADMIN">HR Admin</option>
                   <option value="PROJECT_HEAD">Project Head</option>
                   <option value="FINANCE">Finance</option>
