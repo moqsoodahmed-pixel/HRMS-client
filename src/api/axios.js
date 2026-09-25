@@ -61,7 +61,9 @@ function clean(params = {}) {
 }
 
 export const authAPI = {
-  login: (data) => api.post('/auth/login', data),
+  // `config` optionally carries { headers: { 'X-Device-Signal': ... } } — see
+  // context/AuthContext.jsx login() and lib/geolocation.js getDeviceSignal().
+  login: (data, config) => api.post('/auth/login', data, config),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
@@ -297,6 +299,13 @@ export const settingsAPI = {
   update: (data) => api.patch('/settings', data),
   telegramTest: () => api.post('/settings/telegram/test'),
   dailyReportTelegramTest: () => api.post('/settings/telegram/test-daily-report'),
+};
+
+/** Temporary Remote Work Access (geo-fencing exception) — see server/controllers/remoteWorkController.js. */
+export const remoteWorkAPI = {
+  list: (params) => api.get('/remote-work-approvals', { params: clean(params) }),
+  create: (data) => api.post('/remote-work-approvals', data),
+  revoke: (id) => api.post(`/remote-work-approvals/${id}/revoke`),
 };
 
 export const offboardingAPI = {

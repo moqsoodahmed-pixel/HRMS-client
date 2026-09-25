@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { authAPI } from '../api/axios';
+import { getDeviceSignal } from '../lib/geolocation';
 
 const AuthContext = createContext(null);
 
@@ -115,8 +116,17 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true; };
   }, []);
 
-  const login = useCallback(async (email, password, rememberMe) => {
-    const r = await authAPI.login({ email, password, rememberMe });
+  // `location` is the optional { latitude, longitude, accuracy } captured by
+  // the login form via the browser Geolocation API (see pages/Login.jsx) —
+  // only used server-side when an admin has turned geo-fencing on for
+  // non-exempt roles (see server/services/accessControlService.js). Passing
+  // it through here is the only change; nothing about the existing
+  // email/password/rememberMe flow changes for anyone it doesn't apply to.
+  const login = useCallback(async (email, password, rememberMe, location) => {
+    const r = await authAPI.login(
+      { email, password, rememberMe, location: location || undefined },
+      { headers: { 'X-Device-Signal': getDeviceSignal() } },
+    );
     setUser(r.data.data.user);
     setEmployee(r.data.data.employee);
     return r.data.data;

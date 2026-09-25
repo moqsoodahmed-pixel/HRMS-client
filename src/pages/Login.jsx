@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../api/axios';
 import { Modal, FormField } from '../components/ui';
 import { errorMessage } from '../lib/format';
+import { getCurrentLocation } from '../lib/geolocation';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -26,7 +27,17 @@ export default function Login() {
     setError('');
     setSubmitting(true);
     try {
-      await login(email.trim(), password, remember);
+      // Attempts to read the device's current location so the server can
+      // apply office geo-fencing when it's turned on for this account's
+      // role (see server/services/accessControlService.js). This never
+      // blocks or fails the submit itself — if permission is denied, the
+      // browser doesn't support it, or it times out, `geo` is simply null
+      // and the login proceeds without it; the server is the one that
+      // decides whether a missing location matters for this particular
+      // account. Roles exempt from geo-fencing (CEO/CTO/Project Head) are
+      // unaffected either way.
+      const geo = await getCurrentLocation();
+      await login(email.trim(), password, remember, geo);
       toast.success('Welcome back');
       navigate(location.state?.from || '/dashboard', { replace: true });
     } catch (err) {

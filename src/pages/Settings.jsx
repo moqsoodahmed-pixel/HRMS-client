@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Building2, Clock, CalendarDays, Wallet, LogOut, ShieldCheck, Save, ExternalLink, Lock, Send,
+  Smartphone, MapPin, Plane, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { settingsAPI, leaveAPI, payrollAPI } from '../api/axios';
-import { PageHeader, FormField, StatusBadge, LoadingBlock, ErrorState } from '../components/ui';
-import { errorMessage } from '../lib/format';
+import { settingsAPI, leaveAPI, payrollAPI, remoteWorkAPI, employeeAPI } from '../api/axios';
+import { PageHeader, FormField, StatusBadge, LoadingBlock, ErrorState, SearchInput, DataTable, EmptyState } from '../components/ui';
+import { errorMessage, formatDate } from '../lib/format';
+import { useAuth } from '../context/AuthContext';
+import { getCurrentLocation } from '../lib/geolocation';
 import { Link } from 'react-router-dom';
 
 /**
@@ -188,13 +191,75 @@ export default function Settings() {
           </div>
         </SettingsSection>
 
-        <SettingsSection icon={ShieldCheck} title="Security" description="Current account-security policy (read-only — not database-configurable in this build).">
+        <SettingsSection icon={ShieldCheck} title="Security" description="Current account-security policy.">
           <ul className="space-y-2 text-sm text-gray-700">
             <li className="flex items-center gap-2"><Lock className="h-3.5 w-3.5 text-gray-400" /> Account lockout after 5 failed login attempts, for 30 minutes.</li>
             <li className="flex items-center gap-2"><Lock className="h-3.5 w-3.5 text-gray-400" /> Passwords require uppercase, lowercase, a number and a special character (min. 8 characters).</li>
             <li className="flex items-center gap-2"><Lock className="h-3.5 w-3.5 text-gray-400" /> Sessions are httpOnly-cookie based JWTs.</li>
           </ul>
         </SettingsSection>
+
+        <SettingsSection
+          icon={Smartphone}
+          title="Device & Location Access"
+          description="Restrict sign-in to desktop/laptop devices and/or to within a radius of the office. CEO, CTO and Project Head are always exempt from both."
+        >
+          <div className="mb-4 flex flex-wrap items-center gap-6">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-primary-600"
+                checked={active.security?.mobileRestrictionEnabled ?? false}
+                onChange={(e) => update('security', { mobileRestrictionEnabled: e.target.checked })}
+              />
+              Block mobile/tablet sign-in
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-primary-600"
+                checked={active.security?.geoRestrictionEnabled ?? false}
+                onChange={(e) => update('security', { geoRestrictionEnabled: e.target.checked })}
+              />
+              Restrict sign-in to office location
+            </label>
+          </div>
+          <UseCurrentLocationButton onDetected={(coords) => update('security', coords)} />
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <FormField label="Office Latitude" hint="e.g. 12.9716">
+              <input
+                type="number" step="any" className="input"
+                value={active.security?.officeLatitude ?? ''}
+                onChange={(e) => update('security', { officeLatitude: e.target.value })}
+                placeholder="Not set"
+              />
+            </FormField>
+            <FormField label="Office Longitude" hint="e.g. 77.5946">
+              <input
+                type="number" step="any" className="input"
+                value={active.security?.officeLongitude ?? ''}
+                onChange={(e) => update('security', { officeLongitude: e.target.value })}
+                placeholder="Not set"
+              />
+            </FormField>
+            <FormField label="Allowed Radius (meters)" hint="Default 25m">
+              <input
+                type="number" min="1" className="input"
+                value={active.security?.allowedRadiusMeters ?? ''}
+                onChange={(e) => update('security', { allowedRadiusMeters: e.target.value })}
+                placeholder="25"
+              />
+            </FormField>
+          </div>
+          {active.security?.geoRestrictionEnabled && (active.security?.officeLatitude == null || active.security?.officeLongitude == null) && (
+            <p className="mt-3 flex items-center gap-2 text-xs text-amber-700">
+              <MapPin className="h-3.5 w-3.5" /> Office location restriction is on but coordinates aren't set yet — every restricted sign-in will be denied until they are.
+            </p>
+          )}
+          <SectionSaveButton onSave={() => submitSection('security')} disabled={!form?.security} loading={save.isPending} />
+        </SettingsSection>
+
+        <RemoteWorkAccessSection />
       </div>
     </div>
   );
@@ -275,6 +340,173 @@ function DailyReportTelegramTestButton() {
     <button type="button" className="btn-secondary flex items-center gap-2" onClick={handleTest} disabled={testing}>
       <Send className="h-4 w-4" /> {testing ? 'Sending…' : 'Send test message'}
     </button>
+  );
+}
+
+/**
+ * Auto-fills Office Latitude/Longitude from the free browser GPS Geolocation
+ * API (lib/geolocation.js — the same one the login form uses), while the
+ * admin is physically standing at the office. This is deliberately NOT an
+ * IP-based "geolocation API" lookup: IP geolocation is only accurate to
+ * city/neighborhood level (often off by kilometers), which is useless
+ * against a ~25m radius — GPS is the only free option accurate enough to
+ * actually match what this feature checks at login time.
+ */
+function UseCurrentLocationButton({ onDetected }) {
+  const [detecting, setDetecting] = useState(false);
+
+  const handleClick = async () => {
+    setDetecting(true);
+    try {
+      const coords = await getCurrentLocation({ timeout: 15000 });
+      if (!coords) {
+        toast.error('Could not get your location — check that location permission is allowed for this site, then try again.');
+        return;
+      }
+      onDetected({ officeLatitude: coords.latitude, officeLongitude: coords.longitude });
+      const precision = coords.accuracy != null ? ` (±${Math.round(coords.accuracy)}m accuracy)` : '';
+      toast.success(`Location captured${precision} — review it below, then Save changes.`);
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  return (
+    <button type="button" className="btn-secondary flex items-center gap-2" onClick={handleClick} disabled={detecting}>
+      <MapPin className="h-4 w-4" /> {detecting ? 'Getting your location…' : 'Use my current location'}
+    </button>
+  );
+}
+
+/**
+ * PART 3 — Temporary Remote Work Access. Only rendered for roles that can
+ * actually grant it (HR_ADMIN, PROJECT_HEAD, or elevated — mirrors server
+ * routes/index.js REMOTE_WORK_APPROVER, see server/utils/roles.js
+ * REMOTE_WORK_APPROVER_ROLES) so nobody else sees a form they'd get a 403
+ * from. CEO/CTO/Project Head never need one for themselves — they're
+ * already permanently exempt from geo-fencing — this is for granting the
+ * exception to someone who IS restricted.
+ */
+function RemoteWorkAccessSection() {
+  const { isElevated, hasRole } = useAuth();
+  const canGrant = isElevated || hasRole('HR_ADMIN', 'PROJECT_HEAD');
+  if (!canGrant) return null;
+
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState({ employeeId: '', startDate: '', endDate: '', reason: '' });
+
+  const listQuery = useQuery({ queryKey: ['remote-work-approvals'], queryFn: () => remoteWorkAPI.list() });
+  const approvals = listQuery.data?.data?.data || [];
+
+  const employeesQuery = useQuery({
+    queryKey: ['employees', 'list', 'remote-work-picker', search],
+    queryFn: () => employeeAPI.list({ search, limit: 10 }),
+    enabled: search.length > 1,
+  });
+  const employeeOptions = employeesQuery.data?.data?.data || [];
+
+  const grant = useMutation({
+    mutationFn: (data) => remoteWorkAPI.create(data),
+    onSuccess: () => {
+      toast.success('Remote work access granted');
+      queryClient.invalidateQueries({ queryKey: ['remote-work-approvals'] });
+      setForm({ employeeId: '', startDate: '', endDate: '', reason: '' });
+      setSearch('');
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const revoke = useMutation({
+    mutationFn: (id) => remoteWorkAPI.revoke(id),
+    onSuccess: () => {
+      toast.success('Remote work access revoked');
+      queryClient.invalidateQueries({ queryKey: ['remote-work-approvals'] });
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!form.employeeId || !form.startDate || !form.endDate || !form.reason.trim()) {
+      toast.error('Fill in employee, dates and a reason.');
+      return;
+    }
+    grant.mutate(form);
+  };
+
+  return (
+    <SettingsSection
+      icon={Plane}
+      title="Temporary Remote Work Access"
+      description="Lets a specific employee sign in outside the office radius for a date range. Automatically stops applying once the end date passes — nothing to remember to turn back off."
+    >
+      <form onSubmit={submit} className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative sm:col-span-2 lg:col-span-1">
+          <FormField label="Employee" required>
+            <SearchInput
+              value={form.employeeId ? (employeeOptions.find((e) => e._id === form.employeeId)?.fullName || search) : search}
+              onChange={(v) => { setSearch(v); setForm((f) => ({ ...f, employeeId: '' })); }}
+              placeholder="Search by name or code…"
+            />
+          </FormField>
+          {search.length > 1 && !form.employeeId && employeeOptions.length > 0 && (
+            <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+              {employeeOptions.map((emp) => (
+                <li key={emp._id}>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                    onClick={() => { setForm((f) => ({ ...f, employeeId: emp._id })); setSearch(emp.fullName); }}
+                  >
+                    {emp.fullName} <span className="text-xs text-gray-400">{emp.employeeCode}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <FormField label="Start Date" required>
+          <input type="date" className="input" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
+        </FormField>
+        <FormField label="End Date" required>
+          <input type="date" className="input" value={form.endDate} min={form.startDate || undefined} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
+        </FormField>
+        <FormField label="Reason" required>
+          <input className="input" value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="e.g. Client site visit" />
+        </FormField>
+        <div className="sm:col-span-2 lg:col-span-4">
+          <button type="submit" className="btn-primary" disabled={grant.isPending}>
+            {grant.isPending ? 'Granting…' : 'Grant remote work access'}
+          </button>
+        </div>
+      </form>
+
+      <DataTable
+        columns={[
+          {
+            key: 'employee', header: 'Employee',
+            render: (a) => <span>{a.employee?.fullName || '—'} <span className="text-xs text-gray-400">{a.employee?.employeeCode}</span></span>,
+          },
+          { key: 'range', header: 'Period', render: (a) => `${formatDate(a.startDate)} – ${formatDate(a.endDate)}` },
+          { key: 'reason', header: 'Reason', render: (a) => <span className="text-gray-600">{a.reason}</span> },
+          { key: 'status', header: 'Status', render: (a) => <StatusBadge status={a.status} tone={a.status === 'ACTIVE' ? 'green' : 'gray'} /> },
+          {
+            key: 'actions', header: '',
+            render: (a) => a.status === 'ACTIVE' && (
+              <button type="button" className="btn-ghost" title="Revoke" onClick={() => revoke.mutate(a._id)} disabled={revoke.isPending}>
+                <X className="h-4 w-4" />
+              </button>
+            ),
+          },
+        ]}
+        rows={approvals}
+        isLoading={listQuery.isLoading}
+        error={listQuery.error}
+        onRetry={listQuery.refetch}
+        empty={<EmptyState icon={Plane} title="No remote work exceptions" description="Grant one above when an employee needs to sign in away from the office." />}
+      />
+    </SettingsSection>
   );
 }
 
