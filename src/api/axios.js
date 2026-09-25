@@ -306,6 +306,12 @@ export const remoteWorkAPI = {
   list: (params) => api.get('/remote-work-approvals', { params: clean(params) }),
   create: (data) => api.post('/remote-work-approvals', data),
   revoke: (id) => api.post(`/remote-work-approvals/${id}/revoke`),
+  // Company-wide employee search for the grant-access picker — see
+  // server/controllers/remoteWorkController.js searchEmployeesForApproval
+  // for why this is separate from employeeAPI.list (that one is scoped to
+  // a Project Head's own team; this one isn't, because approving remote
+  // work isn't limited to your own reports).
+  searchEmployees: (params) => api.get('/remote-work-approvals/employees', { params: clean(params) }),
 };
 
 export const offboardingAPI = {

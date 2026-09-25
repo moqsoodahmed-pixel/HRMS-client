@@ -5,7 +5,7 @@ import {
   Smartphone, MapPin, Plane, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { settingsAPI, leaveAPI, payrollAPI, remoteWorkAPI, employeeAPI } from '../api/axios';
+import { settingsAPI, leaveAPI, payrollAPI, remoteWorkAPI } from '../api/axios';
 import { PageHeader, FormField, StatusBadge, LoadingBlock, ErrorState, SearchInput, DataTable, EmptyState } from '../components/ui';
 import { errorMessage, formatDate } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
@@ -399,9 +399,13 @@ function RemoteWorkAccessSection() {
   const listQuery = useQuery({ queryKey: ['remote-work-approvals'], queryFn: () => remoteWorkAPI.list() });
   const approvals = listQuery.data?.data?.data || [];
 
+  // Uses remoteWorkAPI.searchEmployees (company-wide, approver-only) rather
+  // than employeeAPI.list — the latter is scoped to "your own team" for a
+  // Project Head, which meant some employees never showed up here even
+  // though the Project Head is allowed to grant them remote work access.
   const employeesQuery = useQuery({
-    queryKey: ['employees', 'list', 'remote-work-picker', search],
-    queryFn: () => employeeAPI.list({ search, limit: 10 }),
+    queryKey: ['remote-work-approvals', 'employees', search],
+    queryFn: () => remoteWorkAPI.searchEmployees({ search }),
     enabled: search.length > 1,
   });
   const employeeOptions = employeesQuery.data?.data?.data || [];
