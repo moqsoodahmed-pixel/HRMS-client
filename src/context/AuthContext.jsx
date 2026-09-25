@@ -57,7 +57,13 @@ const PERMISSIONS = {
   viewAudit: ['AUDITOR', 'DIRECTOR'],
   // Training & performance reviews
   manageTraining: ['HR_ADMIN'],
-  managePerformanceReviews: ['HR_ADMIN'],
+  // MANAGER (a Sales Team Lead) and PROJECT_HEAD can manage reviews for their
+  // OWN team — the server hard-scopes them to their direct reports
+  // (performanceController resolveReviewableScope), while HR/elevated stay
+  // company-wide. This gate only decides admin-view vs my-reviews-view; the
+  // real boundary is server-side. Matches server utils/roles.js
+  // PERFORMANCE_MANAGE_ROLES.
+  managePerformanceReviews: ['HR_ADMIN', 'PROJECT_HEAD', 'MANAGER'],
   // Sales leads — all roles can view; upload is gated server-side to elevated
   viewLeads: ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
   uploadLeads: [], // elevated only — isElevated() handles this, so empty here

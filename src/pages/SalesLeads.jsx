@@ -934,6 +934,14 @@ export default function SalesLeads() {
   const [batchFilter, setBatchFilter] = useState('');
   const [batches, setBatches] = useState([]);
   const [deletingBatch, setDeletingBatch] = useState(false);
+  // Optional deep-link from the Sales Team Lead dashboard's "View leads"
+  // action (/sales-leads?assignedTo=<repId>) — pre-filters the list to one
+  // team member. Read once from the URL; the server still enforces that a
+  // MANAGER can only ever see their own team's leads regardless of this value.
+  const [assignedToFilter] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('assignedTo') || ''; }
+    catch { return ''; }
+  });
   const [activeTab, setActiveTab] = useState('leads'); // leads | stats
   const [statusModal, setStatusModal] = useState(null);
   const [reassignModal, setReassignModal] = useState(null);
@@ -995,6 +1003,7 @@ export default function SalesLeads() {
         params.leadDate = leadDateFilter;
       }
       if (batchFilter) params.uploadBatch = batchFilter;
+      if (assignedToFilter) params.assignedTo = assignedToFilter;
       const res = await leadsAPI.list(params);
       setLeads(res.data.data || []);
       setTotal(res.data.meta?.total || 0);
@@ -1016,7 +1025,7 @@ export default function SalesLeads() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, leadDateFilter, customDate, batchFilter, isMgmt]);
+  }, [page, search, statusFilter, leadDateFilter, customDate, batchFilter, assignedToFilter, isMgmt]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
   // A stale selection pointing at leads from a different page/filter would

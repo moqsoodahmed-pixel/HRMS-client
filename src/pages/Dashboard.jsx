@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import {
   dashboardAPI, attendanceAPI, leaveAPI, payrollAPI, documentAPI, announcementAPI,
-  policyAPI, onboardingAPI, offboardingAPI, compensationAPI, auditAPI, performanceAPI,
+  policyAPI, onboardingAPI, offboardingAPI, compensationAPI, auditAPI, performanceAPI, leadsAPI,
 } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -703,6 +703,113 @@ function FinanceDashboard() {
 /* MANAGER — team focused                                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * "My Sales Team" — the Sales Team Lead's roster with each rep's lead
+ * progress (assigned / worked / converted) pulled from
+ * leadsAPI.teamOverview() (server: leadController.getSalesTeamOverview,
+ * scoped to reps whose Reports-To is this lead). Only shown to a MANAGER
+ * whose department is Sales / Business Development — that is exactly the
+ * "Sales Team Lead" per the chosen design. Every row/link routes into the
+ * real data (the team member's leads, the team's daily reports, the team's
+ * performance reviews), so the lead can act on what they see.
+ */
+function SalesTeamSection() {
+  const { role, employee } = useAuth();
+  const navigate = useNavigate();
+  const dept = (employee?.department || '').toLowerCase();
+  const isSalesLead = role === 'MANAGER' && (dept.includes('sales') || dept.includes('business development'));
+
+  const teamQuery = useQuery({
+    queryKey: ['leads', 'team-overview'],
+    queryFn: () => leadsAPI.teamOverview(),
+    enabled: isSalesLead,
+  });
+
+  if (!isSalesLead) return null;
+
+  const data = teamQuery.data?.data?.data;
+  const members = data?.members || [];
+  const totals = data?.totals || { members: 0, assigned: 0, contacted: 0, converted: 0 };
+  const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+
+  return (
+    <section className="card mt-6 p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-gray-400" />
+          <h2 className="section-title">My sales team</h2>
+        </div>
+        <div className="flex flex-wrap gap-3 text-sm">
+          <Link to="/sales-leads" className="text-primary-600 hover:underline">Team leads</Link>
+          <Link to="/daily-reports" className="text-primary-600 hover:underline">Daily reports</Link>
+          <Link to="/performance" className="text-primary-600 hover:underline">Performance</Link>
+        </div>
+      </div>
+
+      {/* Team rollup */}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-lg bg-gray-50 p-3 text-center"><p className="text-lg font-bold text-gray-900">{formatNumber(totals.members)}</p><p className="text-xs text-gray-400">Team members</p></div>
+        <div className="rounded-lg bg-gray-50 p-3 text-center"><p className="text-lg font-bold text-gray-900">{formatNumber(totals.assigned)}</p><p className="text-xs text-gray-400">Leads assigned</p></div>
+        <div className="rounded-lg bg-gray-50 p-3 text-center"><p className="text-lg font-bold text-gray-900">{formatNumber(totals.contacted)}</p><p className="text-xs text-gray-400">Worked</p></div>
+        <div className="rounded-lg bg-gray-50 p-3 text-center"><p className="text-lg font-bold text-green-600">{formatNumber(totals.converted)}</p><p className="text-xs text-gray-400">Converted</p></div>
+      </div>
+
+      {teamQuery.isLoading ? (
+        <div className="h-24 animate-pulse rounded bg-gray-100" />
+      ) : members.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No reps report to you yet"
+          description="In Employees → Add/Edit, set a sales rep's Reporting Manager to you and they'll appear here with their lead progress."
+        />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-400">
+                <th className="px-3 py-2">Team member</th>
+                <th className="px-3 py-2">Assigned</th>
+                <th className="px-3 py-2">Worked</th>
+                <th className="px-3 py-2">Converted</th>
+                <th className="px-3 py-2">Conversion</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {members.map((m) => (
+                <tr key={m.employee._id} className="hover:bg-gray-50">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Avatar name={m.employee.fullName} size="sm" />
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-gray-900">{m.employee.fullName}</p>
+                        <p className="truncate text-xs text-gray-400">{m.employee.employeeCode} · {m.employee.designation}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 font-medium text-gray-900">{formatNumber(m.leads.assigned)}</td>
+                  <td className="px-3 py-2 text-gray-700">{formatNumber(m.leads.contacted)}</td>
+                  <td className="px-3 py-2 font-medium text-green-600">{formatNumber(m.leads.converted)}</td>
+                  <td className="px-3 py-2 text-gray-500">{pct(m.leads.converted, m.leads.assigned)}%</td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/sales-leads?assignedTo=${m.employee._id}`)}
+                      className="text-xs text-primary-600 hover:underline"
+                    >
+                      View leads
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ManagerDashboard() {
   const { user, employee } = useAuth();
   const { data, isLoading, error, refetch } = useDashboardStats();
@@ -733,6 +840,9 @@ function ManagerDashboard() {
           {cards.map((c) => <StatCard key={c.label} {...c} />)}
         </div>
       )}
+
+      {/* Sales Team Lead's roster — renders only for a MANAGER in Sales/BD. */}
+      <SalesTeamSection />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="card p-5">

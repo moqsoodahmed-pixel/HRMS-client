@@ -74,10 +74,20 @@ const DEPARTMENT_SUGGESTED_ROLE = {
 /** Returns a role string to suggest, or null if nothing matched (stay EMPLOYEE). */
 function computeSuggestedRole(department, designation, isElevatedCaller) {
   const title = (designation || '').trim();
+  const isSalesDept = /sales|business development/i.test(department || '');
   if (title) {
     for (const rule of DESIGNATION_ROLE_RULES) {
       if (!rule.test.test(title)) continue;
       if (rule.elevatedCallerOnly && !isElevatedCaller) continue;
+      // Sales Team Lead: in Sales / Business Development, a generic "lead"/
+      // "head" title is the team-lead-of-a-sales-team case, which the chosen
+      // design models as the MANAGER role (team dashboard + sees their team's
+      // leads/reports/performance, and — unlike Project Head — still checks in
+      // and stays mobile/geo-restricted). So redirect only that generic
+      // catch-all (PROJECT_HEAD) to MANAGER when the department is Sales/BD;
+      // every more specific rule above (Director/CTO/HR/IT/Manager) is left
+      // exactly as matched.
+      if (rule.role === 'PROJECT_HEAD' && isSalesDept) return 'MANAGER';
       return rule.role;
     }
   }

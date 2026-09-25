@@ -282,6 +282,10 @@ export const performanceAPI = {
   submit: (id) => api.patch(`/performance-reviews/${id}/submit`),
   complete: (id) => api.patch(`/performance-reviews/${id}/complete`),
   remove: (id) => api.delete(`/performance-reviews/${id}`),
+  // Employees the caller may open a review for — a Sales Team Lead (MANAGER)
+  // gets only their own team; HR/elevated get everyone. Used by the create
+  // picker so a lead is never offered someone outside their team.
+  reviewableEmployees: () => api.get('/performance-reviews/reviewable-employees'),
 };
 
 /** Employee-initiated exit requests — new, minimal (see server/controllers/exitRequestController.js). */
@@ -370,6 +374,9 @@ export const leadsAPI = {
   // chosen set of leads goes to, instead of the automatic round-robin split.
   bulkAssign: (data) => api.post('/leads/bulk-assign', data),
   stats: (params) => api.get('/leads/stats', { params: clean(params) }),
+  // Sales Team Lead's roster + per-rep lead progress (see
+  // server/controllers/leadController.js getSalesTeamOverview).
+  teamOverview: () => api.get('/leads/team-overview'),
   batches: () => api.get('/leads/batches'),
   deleteBatch: (batch) => api.delete(`/leads/batch/${encodeURIComponent(batch)}`),
   reveal: (id) => api.post(`/leads/${id}/reveal`),

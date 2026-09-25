@@ -4,7 +4,7 @@ import {
   TrendingUp, Plus, Star, CheckCircle2, FileText, ClipboardList, Trash2, Send, Award,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { performanceAPI, employeeAPI } from '../api/axios';
+import { performanceAPI } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
   PageHeader, StatCard, StatCardSkeleton, DataTable, FilterBar, SearchInput,
@@ -216,12 +216,22 @@ function ReviewFormModal({ open, review, onClose, onSaved }) {
   const [search, setSearch] = useState('');
   const [loadedFor, setLoadedFor] = useState(null);
 
+  // Reviewable employees only: for a Sales Team Lead (MANAGER) this returns
+  // just their own reports, so the picker can never offer someone the server
+  // would reject; for HR/elevated it returns everyone. The search box filters
+  // this list client-side so the options always match what the server accepts.
   const employeesQuery = useQuery({
-    queryKey: ['employees', 'list', 'performance', search],
-    queryFn: () => employeeAPI.list({ search, limit: 50 }),
+    queryKey: ['performance', 'reviewable-employees'],
+    queryFn: () => performanceAPI.reviewableEmployees(),
     enabled: open && !isEdit,
   });
-  const employees = employeesQuery.data?.data?.data || [];
+  const allReviewable = employeesQuery.data?.data?.data || [];
+  const employees = search.trim()
+    ? allReviewable.filter((e) => {
+      const q = search.trim().toLowerCase();
+      return (e.fullName || '').toLowerCase().includes(q) || (e.employeeCode || '').toLowerCase().includes(q);
+    })
+    : allReviewable;
 
   if (open && isEdit && loadedFor !== review._id) {
     setForm({
