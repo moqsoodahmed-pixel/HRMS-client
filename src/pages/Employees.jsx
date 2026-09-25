@@ -19,6 +19,12 @@ export default function Employees() {
   const { can } = useAuth();
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(() => searchParams.get('tab') || 'list');
+  // Which onboarding status the "Onboarding Submissions" tab opens to when a
+  // stat tile is clicked (see the tiles below); '' means "all statuses",
+  // matching OnboardingApprovals' own default-status prop. Read once on
+  // mount too, so a deep link like ?tab=onboarding&onboardingStatus=REJECTED
+  // works the same way a click does.
+  const [onboardingStatus, setOnboardingStatus] = useState(() => searchParams.get('onboardingStatus') || 'SUBMITTED');
 
   // HR view vs. team-lead view. Only roles that actually administer employees
   // (HR_ADMIN / PROJECT_HEAD / elevated — see AuthContext `manageEmployees`)
@@ -51,6 +57,17 @@ export default function Employees() {
     { value: 'edit-requests', label: 'Edit Requests' },
   ];
 
+  // Every stat tile below is a shortcut into the "Onboarding Submissions"
+  // tab, pre-filtered to the onboarding status that tile is counting —
+  // "Total Employees" clears the filter (every status), the other three
+  // match it exactly, so the list a click lands on always agrees with the
+  // number that was clicked (same onboardingProfileAPI.list() data both
+  // count from).
+  const goToOnboarding = (status) => {
+    setOnboardingStatus(status);
+    setTab('onboarding');
+  };
+
   // ── Team-lead (non-HR) view: just their own team, no admin surface. ──
   if (!isHrView) {
     return (
@@ -76,17 +93,17 @@ export default function Employees() {
 
       {summaryQuery.isLoading ? <StatCardSkeleton count={4} /> : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Total Employees" value={counts.total} icon={Users} tone="indigo" />
-          <StatCard label="Approved" value={counts.approved} icon={UserCheck} tone="green" />
-          <StatCard label="Pending" value={counts.pending} icon={Clock} tone="amber" />
-          <StatCard label="Rejected" value={counts.rejected} icon={UserX} tone="red" />
+          <StatCard label="Total Employees" value={counts.total} icon={Users} tone="indigo" onClick={() => goToOnboarding('')} />
+          <StatCard label="Approved" value={counts.approved} icon={UserCheck} tone="green" onClick={() => goToOnboarding('APPROVED')} />
+          <StatCard label="Pending" value={counts.pending} icon={Clock} tone="amber" onClick={() => goToOnboarding('SUBMITTED')} />
+          <StatCard label="Rejected" value={counts.rejected} icon={UserX} tone="red" onClick={() => goToOnboarding('REJECTED')} />
         </div>
       )}
 
       <div className="mt-6">
         <Tabs tabs={tabs} active={tab} onChange={setTab} />
         {tab === 'list' && <EmployeeListPanel />}
-        {tab === 'onboarding' && <OnboardingApprovals />}
+        {tab === 'onboarding' && <OnboardingApprovals key={onboardingStatus} defaultStatus={onboardingStatus} />}
         {tab === 'edit-requests' && <EditRequestsPanel />}
       </div>
     </div>

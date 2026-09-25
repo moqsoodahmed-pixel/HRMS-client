@@ -154,6 +154,35 @@ export function StatCard({ label, value, icon: Icon, tone = 'indigo', hint, onCl
   );
 }
 
+/**
+ * A small pill-shaped action button, shaded the same way StatusBadge is
+ * (rounded-full + a light tone background) instead of plain underlined
+ * text — used for row-level actions like View/Download/Verify/Reject/
+ * Archive so each action reads as clearly as the Verified/Missing badges
+ * next to it, not just as a link.
+ */
+export function ActionButton({ icon: Icon, children, onClick, tone = 'gray', disabled, title, type = 'button' }) {
+  const tones = {
+    indigo: 'bg-primary-50 text-primary-700 hover:bg-primary-100',
+    gray: 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+    green: 'bg-green-50 text-green-700 hover:bg-green-100',
+    red: 'bg-red-50 text-red-700 hover:bg-red-100',
+    purple: 'bg-purple-50 text-purple-700 hover:bg-purple-100',
+    amber: 'bg-amber-50 text-amber-700 hover:bg-amber-100',
+  };
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${tones[tone] || tones.gray}`}
+    >
+      {Icon && <Icon className="h-3.5 w-3.5" />} {children}
+    </button>
+  );
+}
+
 /** Horizontal progress bar with an optional caption. */
 export function ProgressBar({ value, tone = 'primary', label }) {
   const pct = Math.max(0, Math.min(100, Math.round(value || 0)));
@@ -260,11 +289,10 @@ export function Tabs({ tabs, active, onChange }) {
               key={value}
               type="button"
               onClick={() => onChange(value)}
-              className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition ${
-                active === value
+              className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition ${active === value
                   ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-800'
-              }`}
+                }`}
             >
               {label}
               {tab.count !== undefined && (
