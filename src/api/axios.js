@@ -103,6 +103,9 @@ export const dashboardAPI = {
 
 export const attendanceAPI = {
   list: (params) => api.get('/attendance', { params: clean(params) }),
+  // Who the dashboard's "Absent Today" tile is counting, by name — see
+  // server/controllers/attendanceController.js getAbsentees.
+  absentees: (params) => api.get('/attendance/absentees', { params: clean(params) }),
   stats: (params) => api.get('/attendance/stats', { params: clean(params) }),
   today: () => api.get('/attendance/me/today'),
   checkIn: () => api.post('/attendance/checkin'),

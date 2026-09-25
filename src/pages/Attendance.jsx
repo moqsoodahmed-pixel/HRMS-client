@@ -726,6 +726,18 @@ function ShiftFormModal({ open, onClose, onSaved }) {
 /* Attendance History (the original table + filters + mark/edit)       */
 /* ------------------------------------------------------------------ */
 
+// Sentinel filter value for "everyone the dashboard's Absent Today tile
+// counted" — NOT a real Attendance.status value (never sent to the
+// mark/edit endpoints), so it's kept local to this panel's Status dropdown
+// rather than added to the shared ATTENDANCE_STATUSES constant. Selecting
+// it switches this panel to attendanceAPI.absentees() (a walk of eligible
+// EMPLOYEES with no/absent record for the day) instead of the normal
+// attendanceAPI.list() (a walk of attendance RECORDS) — see
+// server/controllers/attendanceController.js getAbsentees for why a plain
+// status=ABSENT filter can't show these people: most of them have no
+// attendance record at all, so they don't exist as rows in that list.
+export const NOT_ACCOUNTED_FOR = 'NOT_ACCOUNTED_FOR';
+
 function AttendanceHistoryPanel() {
   const { can } = useAuth();
   const queryClient = useQueryClient();
@@ -747,10 +759,24 @@ function AttendanceHistoryPanel() {
   const setFilter = (key, value) => { setFilters((f) => ({ ...f, [key]: value })); setPage(1); };
   const resetFilters = () => { setFilters({ date: today(), status: '', department: '', designation: '', employeeId: '', search: '' }); setPage(1); };
 
+  const isAbsenteeView = filters.status === NOT_ACCOUNTED_FOR;
+
   const listQuery = useQuery({
     queryKey: ['attendance', 'list', filters, page],
     queryFn: () => attendanceAPI.list({ ...filters, page, limit: PAGE_SIZE }),
     placeholderData: keepPreviousData,
+    enabled: !isAbsenteeView,
+  });
+  // Walks eligible EMPLOYEES with no/absent record for the day, instead of
+  // attendance RECORDS — see the NOT_ACCOUNTED_FOR comment above.
+  const absenteesQuery = useQuery({
+    queryKey: ['attendance', 'absentees', filters, page],
+    queryFn: () => attendanceAPI.absentees({
+      date: filters.date, department: filters.department, designation: filters.designation, search: filters.search,
+      page, limit: PAGE_SIZE,
+    }),
+    placeholderData: keepPreviousData,
+    enabled: isAbsenteeView,
   });
   const employeesQuery = useQuery({
     queryKey: ['employees', 'options'],
@@ -758,10 +784,19 @@ function AttendanceHistoryPanel() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const records = listQuery.data?.data?.data || [];
-  const meta = listQuery.data?.data?.meta;
+  const activeQuery = isAbsenteeView ? absenteesQuery : listQuery;
+  const records = activeQuery.data?.data?.data || [];
+  const meta = activeQuery.data?.data?.meta;
   const managers = employeesQuery.data?.data?.data?.managers || [];
   const designations = employeesQuery.data?.data?.data?.designations || [];
+
+  const ABSENT_REASON_LABELS = {
+    NOT_CHECKED_IN: 'Not checked in',
+    ABSENT: 'Marked absent',
+    ON_LEAVE: 'On leave',
+    HOLIDAY: 'Holiday',
+    WEEKEND: 'Weekend',
+  };
 
   const refreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ['attendance'] });
@@ -818,7 +853,48 @@ function AttendanceHistoryPanel() {
     }] : []),
   ], [can]);
 
+  // The absentee view (see NOT_ACCOUNTED_FOR above) shows EMPLOYEES, not
+  // attendance records — most rows have no check-in/check-out/hours to show
+  // at all, so reusing the normal columns would render a wall of dashes.
+  // A distinct, honest column set instead: who, and why they're not
+  // counted as present (no record vs. an explicit Absent/On Leave/Holiday/
+  // Weekend record for the day).
+  const absenteeColumns = useMemo(() => [
+    {
+      key: 'employee',
+      header: 'Employee',
+      render: (row) => (
+        <div className="flex items-center gap-3">
+          <Avatar name={row.employee?.fullName} size="sm" />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-gray-900">{row.employee?.fullName || 'Unknown'}</p>
+            <p className="truncate text-xs text-gray-400">{row.employee?.designation}</p>
+          </div>
+        </div>
+      ),
+    },
+    { key: 'code', header: 'Code', render: (row) => <span className="font-mono text-xs">{row.employee?.employeeCode || '—'}</span> },
+    { key: 'department', header: 'Department', render: (row) => row.employee?.department || '—' },
+    { key: 'date', header: 'Date', render: (row) => formatDate(row.date) },
+    {
+      key: 'reason',
+      header: 'Why they\'re not counted as present',
+      render: (row) => <StatusBadge status={row.reason} tone={row.reason === 'NOT_CHECKED_IN' ? 'red' : 'gray'} label={ABSENT_REASON_LABELS[row.reason] || humanise(row.reason)} />,
+    },
+  ], []);
+
   const handleExport = () => {
+    if (isAbsenteeView) {
+      exportCsv(`attendance-absent-${filters.date || 'all'}.csv`, [
+        { label: 'Employee', value: (r) => r.employee?.fullName },
+        { label: 'Code', value: (r) => r.employee?.employeeCode },
+        { label: 'Department', value: (r) => r.employee?.department },
+        { label: 'Date', value: (r) => formatDate(r.date) },
+        { label: 'Reason', value: (r) => ABSENT_REASON_LABELS[r.reason] || r.reason },
+      ], records);
+      toast.success('Exported the current page');
+      return;
+    }
     exportCsv(`attendance-${filters.date || 'all'}.csv`, [
       { label: 'Employee', value: (r) => r.employee?.fullName },
       { label: 'Code', value: (r) => r.employee?.employeeCode },
@@ -857,7 +933,13 @@ function AttendanceHistoryPanel() {
         </div>
         <div>
           <label className="label">Status</label>
-          <Select className="w-40" value={filters.status} onChange={(e) => setFilter('status', e.target.value)} options={ATTENDANCE_STATUSES} placeholder="All statuses" />
+          <Select
+            className="w-40"
+            value={filters.status}
+            onChange={(e) => setFilter('status', e.target.value)}
+            options={[...ATTENDANCE_STATUSES, { value: NOT_ACCOUNTED_FOR, label: 'Absent (not counted as present)' }]}
+            placeholder="All statuses"
+          />
         </div>
         <div>
           <label className="label">Department</label>
@@ -880,12 +962,14 @@ function AttendanceHistoryPanel() {
       </FilterBar>
 
       <DataTable
-        columns={columns}
+        columns={isAbsenteeView ? absenteeColumns : columns}
         rows={records}
-        isLoading={listQuery.isLoading}
-        error={listQuery.error}
-        onRetry={listQuery.refetch}
-        empty={<EmptyState icon={Clock} title="No Requests Found" description={`Nothing was recorded for ${formatDate(filters.date)} with the current filters.`} />}
+        isLoading={activeQuery.isLoading}
+        error={activeQuery.error}
+        onRetry={activeQuery.refetch}
+        empty={isAbsenteeView
+          ? <EmptyState icon={UserCheck} title="Everyone is accounted for" description={`No one is missing from attendance on ${formatDate(filters.date)} with the current filters.`} />
+          : <EmptyState icon={Clock} title="No Requests Found" description={`Nothing was recorded for ${formatDate(filters.date)} with the current filters.`} />}
         footer={<Pagination page={meta?.page || 1} totalPages={meta?.totalPages} total={meta?.total} limit={PAGE_SIZE} onChange={setPage} />}
       />
 

@@ -23,6 +23,10 @@ import {
   errorMessage, toDateInput,
 } from '../lib/format';
 import { COMPANY_NAME } from '../constants';
+// The exact sentinel the Attendance page's "Absent (not counted as
+// present)" filter uses — importing it (rather than retyping the string)
+// keeps the two files from silently drifting apart.
+import { NOT_ACCOUNTED_FOR } from './Attendance';
 
 // Mirrors UNDO_CHECKOUT_GRACE_MINUTES on the server (attendanceController.js) —
 // only used here to show/hide the "Undo check-out" button and its countdown;
@@ -579,7 +583,7 @@ function HRDashboard() {
   const cards = [
     { label: 'Total Employees', value: formatNumber(stats?.totalEmployees), icon: Users, tone: 'indigo', hint: `${formatNumber(stats?.activeEmployees)} active`, onClick: () => navigate('/employees') },
     { label: 'Present Today', value: formatNumber(stats?.presentToday), icon: UserCheck, tone: 'green', onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}`) },
-    { label: 'Absent Today', value: formatNumber(stats?.absentToday), icon: UserX, tone: 'red', onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}`) },
+    { label: 'Absent Today', value: formatNumber(stats?.absentToday), icon: UserX, tone: 'red', onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}&status=${NOT_ACCOUNTED_FOR}`) },
     { label: 'On Leave', value: formatNumber(stats?.onLeaveEmployees), icon: CalendarClock, tone: 'blue', hint: `${formatNumber(stats?.pendingLeave)} pending requests`, onClick: () => navigate('/leave?tab=requests') },
     { label: 'Documents to Verify', value: formatNumber(stats?.pendingDocs), icon: FileWarning, tone: 'amber', onClick: () => navigate('/documents') },
     { label: 'Probation', value: formatNumber(stats?.probation), icon: Clock, tone: 'amber', onClick: () => navigate('/employees?status=PROBATION') },
@@ -712,7 +716,7 @@ function ManagerDashboard() {
   const cards = [
     { label: 'Team Size', value: formatNumber(stats?.totalEmployees), icon: Users, tone: 'indigo', onClick: () => navigate('/employees') },
     { label: 'Present Today', value: formatNumber(stats?.presentToday), icon: UserCheck, tone: 'green', onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}`) },
-    { label: 'Absent Today', value: formatNumber(stats?.absentToday), icon: UserX, tone: 'red', onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}`) },
+    { label: 'Absent Today', value: formatNumber(stats?.absentToday), icon: UserX, tone: 'red', onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}&status=${NOT_ACCOUNTED_FOR}`) },
     { label: 'On Leave', value: formatNumber(stats?.onLeaveEmployees), icon: CalendarClock, tone: 'blue', hint: `${formatNumber(stats?.pendingLeave)} pending approval`, onClick: () => navigate('/leave?tab=requests') },
   ];
 
