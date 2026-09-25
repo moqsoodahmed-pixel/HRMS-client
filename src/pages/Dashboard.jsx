@@ -22,7 +22,7 @@ import {
   formatCurrency, formatDate, formatNumber, humanise, relativeTime, duration, formatTime,
   errorMessage, toDateInput,
 } from '../lib/format';
-import { COMPANY_NAME } from '../constants';
+import { COMPANY_NAME, isSalesTeamLead } from '../constants';
 // The exact sentinel the Attendance page's "Absent (not counted as
 // present)" filter uses — importing it (rather than retyping the string)
 // keeps the two files from silently drifting apart.
@@ -827,8 +827,15 @@ function ManagerDashboard() {
     { label: 'On Leave', value: formatNumber(stats?.onLeaveEmployees), icon: CalendarClock, tone: 'blue', hint: `${formatNumber(stats?.pendingLeave)} pending approval`, onClick: () => navigate('/leave?tab=requests') },
   ];
 
+  // A Sales Team Lead (Manager in Sales/BD) gets a dashboard clearly badged as
+  // such — the same team-scoped shell, plus the "My sales team" section below.
+  const salesLead = isSalesTeamLead(user?.role, employee?.department);
+  const subtitle = salesLead
+    ? `Sales Team Lead overview — ${formatDate(new Date())}.`
+    : `Your team's overview — ${formatDate(new Date())}.`;
+
   return (
-    <DashboardShell title={`${greetingFor()}, ${displayName}`} subtitle={`Your team's overview — ${formatDate(new Date())}.`}>
+    <DashboardShell title={`${greetingFor()}, ${displayName}`} subtitle={subtitle}>
       <QuickActions actions={[
         { to: '/attendance', label: 'Team Attendance', icon: Clock },
         { to: '/leave', label: 'Team Leave', icon: CalendarDays },

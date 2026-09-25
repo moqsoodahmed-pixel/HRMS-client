@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { notificationAPI } from '../api/axios';
 import { Avatar, Dropdown, Spinner } from './ui';
 import { relativeTime, errorMessage } from '../lib/format';
-import { ROLE_LABELS } from '../constants';
+import { roleDisplayLabel } from '../constants';
 
 /** Where a notification should take the reader when it is opened. */
 const LINK_BY_MODEL = {
@@ -131,7 +131,7 @@ export default function Header({ onMenuClick }) {
                 <span className="block max-w-[12rem] truncate text-sm font-medium text-gray-900">
                   {employee?.fullName || user?.email}
                 </span>
-                <span className="block text-xs text-gray-400">{ROLE_LABELS[user?.role] || user?.role}</span>
+                <span className="block text-xs text-gray-400">{roleDisplayLabel(user?.role, employee?.department)}</span>
               </span>
             </button>
           }

@@ -39,6 +39,27 @@ export const ROLE_LABELS = {
   AUDITOR: 'Auditor',
 };
 
+/**
+ * True when a role + department combination is the "Sales Team Lead" — i.e. a
+ * MANAGER (the role chosen to model a sales team lead) whose department is
+ * Sales or Business Development. Kept in one place so the label, the form
+ * note and the dashboard all agree on exactly who counts as a Sales Team Lead.
+ */
+export function isSalesTeamLead(role, department) {
+  return role === 'MANAGER' && /sales|business development/i.test(department || '');
+}
+
+/**
+ * The role label to SHOW a human. Identical to ROLE_LABELS for everyone
+ * except a Sales Team Lead (Manager in Sales/BD), who is shown as
+ * "Sales Team Lead" rather than the generic "Manager" — the underlying role
+ * is still MANAGER everywhere in code/permissions; this only changes display.
+ */
+export function roleDisplayLabel(role, department) {
+  if (isSalesTeamLead(role, department)) return 'Sales Team Lead';
+  return ROLE_LABELS[role] || role;
+}
+
 export const EMPLOYEE_STATUSES = ['ACTIVE', 'PROBATION', 'ON_LEAVE', 'NOTICE_PERIOD', 'INACTIVE'];
 export const EMPLOYMENT_TYPES = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT'];
 export const GENDERS = ['Male', 'Female', 'Other'];

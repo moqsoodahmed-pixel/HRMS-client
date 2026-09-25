@@ -7,7 +7,7 @@ import { employeeAPI } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { FormField, Select, LoadingBlock, StatusBadge, InfoRow, EmptyState } from '../components/ui';
 import {
-  DEPARTMENTS, EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, GENDERS, BLOOD_GROUPS, REQUIRED_DOCUMENT_TYPES,
+  DEPARTMENTS, EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, GENDERS, BLOOD_GROUPS, REQUIRED_DOCUMENT_TYPES, isSalesTeamLead,
 } from '../constants';
 import { errorMessage, fieldErrors, humanise, formatDate } from '../lib/format';
 
@@ -499,6 +499,17 @@ export default function EmployeeForm() {
                   <p className="mt-1 text-xs font-medium text-amber-600">
                     Auto-detected from the Designation/Department — this account was still capped at
                     Employee access. Review and save to apply.
+                  </p>
+                )}
+                {/* Make the "Sales Team Lead" identity explicit: a Manager in
+                    Sales / Business Development IS the Sales Team Lead. The
+                    stored role stays MANAGER, but this confirms to whoever is
+                    filling the form what this person will actually become. */}
+                {isSalesTeamLead(form.role, form.department) && (
+                  <p className="mt-1 rounded-md bg-primary-50 px-2 py-1.5 text-xs font-medium text-primary-700">
+                    ✓ This makes them a <span className="font-semibold">Sales Team Lead</span>. After saving, when they log in
+                    they get the sales team dashboard with a “My sales team” section, see their team’s leads, and can manage
+                    their team’s daily reports and performance. Set each rep’s <span className="font-semibold">Reporting Manager</span> (below) to this person so they roll up here.
                   </p>
                 )}
               </FormField>
