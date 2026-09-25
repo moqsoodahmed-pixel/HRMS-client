@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   Users, UserCheck, UserX, CalendarClock, FileWarning, Cake, Building2,
@@ -20,7 +20,7 @@ import {
 } from '../components/ui';
 import {
   formatCurrency, formatDate, formatNumber, humanise, relativeTime, duration, formatTime,
-  errorMessage,
+  errorMessage, toDateInput,
 } from '../lib/format';
 import { COMPANY_NAME } from '../constants';
 
@@ -48,6 +48,12 @@ export default function Dashboard() {
 function useDashboardStats() {
   return useQuery({ queryKey: ['dashboard', 'stats'], queryFn: () => dashboardAPI.stats() });
 }
+
+// Local shorthand for "today, as the YYYY-MM-DD the attendance/leave pages'
+// date filters expect" — used to deep-link dashboard stat tiles to the
+// exact day they summarised (see AdminDashboard/HRDashboard/ManagerDashboard
+// /EmployeeDashboard cards below).
+const todayInput = () => toDateInput(new Date());
 
 function greetingFor() {
   const h = new Date().getHours();
@@ -457,6 +463,7 @@ function AdminDashboard({ readOnly = false }) {
   const payload = data?.data?.data;
   const stats = payload?.stats;
   const displayName = employee?.fullName?.split(' ')[0] || user?.email?.split('@')[0];
+  const navigate = useNavigate();
 
   if (error) return <StatsError error={error} onRetry={refetch} />;
 
@@ -469,10 +476,12 @@ function AdminDashboard({ readOnly = false }) {
   // population (see dashboardController.js), but a percentage must never display over 100 regardless.
   const attendanceRate = stats?.attendanceEligibleEmployees ? Math.min(100, Math.round((stats.presentToday / stats.attendanceEligibleEmployees) * 100)) : 0;
 
+  // Every tile below is now clickable — it opens the page that actually
+  // holds the records behind the number, instead of being a dead number.
   const cards = [
-    { label: 'Total Employees', value: formatNumber(stats?.totalEmployees), icon: Users, tone: 'indigo', hint: `${formatNumber(stats?.activeEmployees)} active` },
-    { label: 'Attendance Today', value: `${attendanceRate}%`, icon: UserCheck, tone: 'green', hint: `${formatNumber(stats?.presentToday)} present` },
-    { label: 'Pending Requests', value: formatNumber(pendingRequests), icon: CalendarClock, tone: 'amber', hint: `${formatNumber(stats?.pendingOnboarding)} onboarding, ${formatNumber(stats?.pendingLeave)} leave` },
+    { label: 'Total Employees', value: formatNumber(stats?.totalEmployees), icon: Users, tone: 'indigo', hint: `${formatNumber(stats?.activeEmployees)} active`, onClick: () => navigate('/employees') },
+    { label: 'Attendance Today', value: `${attendanceRate}%`, icon: UserCheck, tone: 'green', hint: `${formatNumber(stats?.presentToday)} present`, onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}`) },
+    { label: 'Pending Requests', value: formatNumber(pendingRequests), icon: CalendarClock, tone: 'amber', hint: `${formatNumber(stats?.pendingOnboarding)} onboarding, ${formatNumber(stats?.pendingLeave)} leave`, onClick: () => navigate('/leave?tab=requests') },
     {
       // payload.payroll is a real object as soon as the caller can view payroll at
       // all (payslips: 0 included) — must check payslips > 0, not just truthiness,
@@ -483,6 +492,7 @@ function AdminDashboard({ readOnly = false }) {
       icon: Wallet,
       tone: 'purple',
       hint: payload?.payroll?.payslips > 0 ? humanise(payload.payroll.status) : 'Not processed',
+      onClick: () => navigate('/payroll'),
     },
   ];
 
@@ -543,6 +553,7 @@ function HRDashboard() {
   const payload = data?.data?.data;
   const stats = payload?.stats;
   const displayName = employee?.fullName?.split(' ')[0] || user?.email?.split('@')[0];
+  const navigate = useNavigate();
 
   const onboardingQuery = useQuery({ queryKey: ['onboarding', 'overview', {}], queryFn: () => onboardingAPI.overview() });
   const offboardingQuery = useQuery({ queryKey: ['offboarding', 'overview', {}], queryFn: () => offboardingAPI.overview() });
@@ -551,15 +562,29 @@ function HRDashboard() {
 
   if (error) return <StatsError error={error} onRetry={refetch} />;
 
+  // Every tile is clickable now, opening the page/filter it's actually
+  // counting from:
+  //  - Present/Absent Today -> today's attendance list (see the
+  //    AttendanceHistoryPanel/AttendanceManagementView deep-link support
+  //    added alongside this). Deliberately no ?status filter: "Present
+  //    Today" is PRESENT + LATE + WORK_FROM_HOME + HALF_DAY combined (see
+  //    dashboardController.js), and "Absent Today" is mostly employees with
+  //    NO attendance record at all for the day — neither maps to a single
+  //    status value the list's dropdown could filter to, so filtering by
+  //    one status would show fewer rows than the tile counted and look like
+  //    yet another mismatch. Opening the full day's list (already sorted by
+  //    date, same records the count was built from) is the honest version.
+  //  - Probation/Notice Period -> the employee list pre-filtered to that
+  //    exact status (an exact 1:1 field match, so this one IS precise).
   const cards = [
-    { label: 'Total Employees', value: formatNumber(stats?.totalEmployees), icon: Users, tone: 'indigo', hint: `${formatNumber(stats?.activeEmployees)} active` },
-    { label: 'Present Today', value: formatNumber(stats?.presentToday), icon: UserCheck, tone: 'green' },
-    { label: 'Absent Today', value: formatNumber(stats?.absentToday), icon: UserX, tone: 'red' },
-    { label: 'On Leave', value: formatNumber(stats?.onLeaveEmployees), icon: CalendarClock, tone: 'blue', hint: `${formatNumber(stats?.pendingLeave)} pending requests` },
-    { label: 'Documents to Verify', value: formatNumber(stats?.pendingDocs), icon: FileWarning, tone: 'amber' },
-    { label: 'Probation', value: formatNumber(stats?.probation), icon: Clock, tone: 'amber' },
-    { label: 'Notice Period', value: formatNumber(stats?.noticePeriod), icon: UserMinus, tone: 'orange' },
-    { label: 'Joined This Month', value: formatNumber(stats?.newJoiners), icon: UserPlus, tone: 'green' },
+    { label: 'Total Employees', value: formatNumber(stats?.totalEmployees), icon: Users, tone: 'indigo', hint: `${formatNumber(stats?.activeEmployees)} active`, onClick: () => navigate('/employees') },
+    { label: 'Present Today', value: formatNumber(stats?.presentToday), icon: UserCheck, tone: 'green', onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}`) },
+    { label: 'Absent Today', value: formatNumber(stats?.absentToday), icon: UserX, tone: 'red', onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}`) },
+    { label: 'On Leave', value: formatNumber(stats?.onLeaveEmployees), icon: CalendarClock, tone: 'blue', hint: `${formatNumber(stats?.pendingLeave)} pending requests`, onClick: () => navigate('/leave?tab=requests') },
+    { label: 'Documents to Verify', value: formatNumber(stats?.pendingDocs), icon: FileWarning, tone: 'amber', onClick: () => navigate('/documents') },
+    { label: 'Probation', value: formatNumber(stats?.probation), icon: Clock, tone: 'amber', onClick: () => navigate('/employees?status=PROBATION') },
+    { label: 'Notice Period', value: formatNumber(stats?.noticePeriod), icon: UserMinus, tone: 'orange', onClick: () => navigate('/employees?status=NOTICE_PERIOD') },
+    { label: 'Joined This Month', value: formatNumber(stats?.newJoiners), icon: UserPlus, tone: 'green', onClick: () => navigate('/employees') },
   ];
 
   return (
@@ -631,6 +656,7 @@ function LifecycleProgressCard({ title, icon: Icon, meta, isLoading, to }) {
 
 function FinanceDashboard() {
   const { user, employee } = useAuth();
+  const navigate = useNavigate();
   const now = new Date();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['payroll', 'summary', { month: now.getMonth() + 1, year: now.getFullYear() }],
@@ -650,11 +676,11 @@ function FinanceDashboard() {
 
       {isLoading ? <StatCardSkeleton count={5} /> : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <StatCard label="Gross Payroll" value={formatCurrency(s?.grossPayroll, { compact: true })} icon={TrendingUp} tone="indigo" hint={`${s?.payslipCount ?? 0} payslip(s)`} />
-          <StatCard label="Total Deductions" value={formatCurrency(s?.totalDeductions, { compact: true })} icon={Receipt} tone="red" />
-          <StatCard label="Net Payroll" value={formatCurrency(s?.netPayroll, { compact: true })} icon={Wallet} tone="green" />
-          <StatCard label="Employees Paid" value={formatNumber(s?.employeesPaid)} icon={UserCheck} tone="blue" hint={formatCurrency(s?.paidAmount, { compact: true })} />
-          <StatCard label="Pending Payroll" value={formatNumber(s?.pendingPayslips)} icon={Clock} tone="amber" hint={`${s?.activeStructures ?? 0} active structures`} />
+          <StatCard label="Gross Payroll" value={formatCurrency(s?.grossPayroll, { compact: true })} icon={TrendingUp} tone="indigo" hint={`${s?.payslipCount ?? 0} payslip(s)`} onClick={() => navigate('/payroll')} />
+          <StatCard label="Total Deductions" value={formatCurrency(s?.totalDeductions, { compact: true })} icon={Receipt} tone="red" onClick={() => navigate('/payroll')} />
+          <StatCard label="Net Payroll" value={formatCurrency(s?.netPayroll, { compact: true })} icon={Wallet} tone="green" onClick={() => navigate('/payroll')} />
+          <StatCard label="Employees Paid" value={formatNumber(s?.employeesPaid)} icon={UserCheck} tone="blue" hint={formatCurrency(s?.paidAmount, { compact: true })} onClick={() => navigate('/payroll')} />
+          <StatCard label="Pending Payroll" value={formatNumber(s?.pendingPayslips)} icon={Clock} tone="amber" hint={`${s?.activeStructures ?? 0} active structures`} onClick={() => navigate('/payroll')} />
         </div>
       )}
 
@@ -679,14 +705,15 @@ function ManagerDashboard() {
   const payload = data?.data?.data;
   const stats = payload?.stats;
   const displayName = employee?.fullName?.split(' ')[0] || user?.email?.split('@')[0];
+  const navigate = useNavigate();
 
   if (error) return <StatsError error={error} onRetry={refetch} />;
 
   const cards = [
-    { label: 'Team Size', value: formatNumber(stats?.totalEmployees), icon: Users, tone: 'indigo' },
-    { label: 'Present Today', value: formatNumber(stats?.presentToday), icon: UserCheck, tone: 'green' },
-    { label: 'Absent Today', value: formatNumber(stats?.absentToday), icon: UserX, tone: 'red' },
-    { label: 'On Leave', value: formatNumber(stats?.onLeaveEmployees), icon: CalendarClock, tone: 'blue', hint: `${formatNumber(stats?.pendingLeave)} pending approval` },
+    { label: 'Team Size', value: formatNumber(stats?.totalEmployees), icon: Users, tone: 'indigo', onClick: () => navigate('/employees') },
+    { label: 'Present Today', value: formatNumber(stats?.presentToday), icon: UserCheck, tone: 'green', onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}`) },
+    { label: 'Absent Today', value: formatNumber(stats?.absentToday), icon: UserX, tone: 'red', onClick: () => navigate(`/attendance?tab=history&date=${todayInput()}`) },
+    { label: 'On Leave', value: formatNumber(stats?.onLeaveEmployees), icon: CalendarClock, tone: 'blue', hint: `${formatNumber(stats?.pendingLeave)} pending approval`, onClick: () => navigate('/leave?tab=requests') },
   ];
 
   return (
@@ -708,11 +735,20 @@ function ManagerDashboard() {
           <div className="mb-4 flex items-center gap-2"><Clock className="h-4 w-4 text-gray-400" /><h2 className="section-title">Today's attendance breakdown</h2></div>
           {isLoading ? <div className="h-24 animate-pulse rounded bg-gray-100" /> : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {/* Each of these IS a single exact attendance status (unlike
+                  the Present/Absent Today tiles above, which are combined
+                  totals), so linking straight to that status filter shows
+                  exactly the records this number came from. */}
               {['PRESENT', 'LATE', 'WORK_FROM_HOME', 'HALF_DAY', 'ON_LEAVE', 'ABSENT'].map((s) => (
-                <div key={s} className="rounded-lg bg-gray-50 p-3 text-center">
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => navigate(`/attendance?tab=history&date=${todayInput()}&status=${s}`)}
+                  className="rounded-lg bg-gray-50 p-3 text-center transition hover:bg-gray-100"
+                >
                   <p className="text-lg font-bold text-gray-900">{payload?.attendanceByStatus?.[s] || 0}</p>
                   <p className="text-xs text-gray-400">{humanise(s)}</p>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -729,6 +765,7 @@ function ManagerDashboard() {
 
 function AuditorDashboard() {
   const { user, employee } = useAuth();
+  const navigate = useNavigate();
   const displayName = employee?.fullName?.split(' ')[0] || user?.email?.split('@')[0];
   const auditQuery = useQuery({ queryKey: ['audit', 'list', { limit: 10 }], queryFn: () => auditAPI.list({ limit: 10 }) });
   const filtersQuery = useQuery({ queryKey: ['audit', 'filters'], queryFn: () => auditAPI.filters() });
@@ -747,9 +784,9 @@ function AuditorDashboard() {
 
       {auditQuery.isLoading ? <StatCardSkeleton count={3} /> : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard label="Total Audit Entries" value={formatNumber(meta?.total)} icon={ScrollText} tone="indigo" />
-          <StatCard label="Modules Tracked" value={formatNumber(filters?.modules?.length)} icon={ShieldAlert} tone="blue" />
-          <StatCard label="Action Types" value={formatNumber(filters?.actions?.length)} icon={ClipboardList} tone="purple" />
+          <StatCard label="Total Audit Entries" value={formatNumber(meta?.total)} icon={ScrollText} tone="indigo" onClick={() => navigate('/audit')} />
+          <StatCard label="Modules Tracked" value={formatNumber(filters?.modules?.length)} icon={ShieldAlert} tone="blue" onClick={() => navigate('/audit')} />
+          <StatCard label="Action Types" value={formatNumber(filters?.actions?.length)} icon={ClipboardList} tone="purple" onClick={() => navigate('/audit')} />
         </div>
       )}
 
@@ -909,6 +946,7 @@ function RecentActivitiesCard() {
 
 function EmployeeDashboard() {
   const { user, employee, needsOnboarding } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const displayName = employee?.fullName || user?.email?.split('@')[0];
   const [confirmingCheckOut, setConfirmingCheckOut] = useState(false);
@@ -1065,14 +1103,16 @@ function EmployeeDashboard() {
           value={myToday?.record ? humanise(myToday.record.status) : 'Not marked'}
           icon={Clock}
           tone={myToday?.record ? 'green' : 'gray'}
+          onClick={() => navigate('/attendance')}
         />
-        <StatCard label="Approved Leaves" value={approvedLeaveQuery.isLoading ? '—' : formatNumber(approvedLeaveCount)} icon={CalendarDays} tone="indigo" />
+        <StatCard label="Approved Leaves" value={approvedLeaveQuery.isLoading ? '—' : formatNumber(approvedLeaveCount)} icon={CalendarDays} tone="indigo" onClick={() => navigate('/leave')} />
         <StatCard
           label="Latest Payslip"
           value={latestPayslip ? new Date(latestPayslip.year, latestPayslip.month - 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : 'No Payslip'}
           icon={Receipt}
           tone={latestPayslip ? 'green' : 'gray'}
           hint={latestPayslip ? humanise(latestPayslip.status) : ''}
+          onClick={() => navigate('/payroll')}
         />
         <StatCard
           label="Performance"
@@ -1080,6 +1120,7 @@ function EmployeeDashboard() {
           icon={TrendingUp}
           tone={latestReview?.overallRating != null ? 'purple' : 'gray'}
           hint={latestReview ? `${latestReview.reviewPeriod} · ${humanise(latestReview.status)}` : ''}
+          onClick={() => navigate('/performance')}
         />
       </div>
 

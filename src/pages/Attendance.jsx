@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Clock, LogIn, LogOut, Users, UserCheck, UserX, CalendarOff, AlarmClock, Pencil, Plus, Download,
@@ -402,7 +403,14 @@ function RequestModal({ open, onClose, onSaved }) {
 
 function AttendanceManagementView() {
   const { role } = useAuth();
-  const [tab, setTab] = useState('submissions');
+  // Deep-link support: the dashboard's Present/Absent/Attendance stat tiles
+  // (pages/Dashboard.jsx) link here as e.g. /attendance?tab=history&date=...
+  // so clicking one actually lands on the attendance list for that day
+  // instead of the default "Attendance Submissions" tab, which had nothing
+  // to do with what the tile showed. Read once on mount, same as every
+  // other tab switch here — clicking tabs afterward works exactly as before.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'submissions');
   const [week, setWeek] = useState(() => toDateInput(new Date()));
   const range = weekRangeOf(week);
 
@@ -721,8 +729,17 @@ function ShiftFormModal({ open, onClose, onSaved }) {
 function AttendanceHistoryPanel() {
   const { can } = useAuth();
   const queryClient = useQueryClient();
+  // Same deep-link support as the tab above — a dashboard tile can pass
+  // ?date=YYYY-MM-DD (always "today" from the dashboard, but honoured
+  // generally) so the list opens already showing the day the tile counted,
+  // not whatever day was last selected.
+  const [searchParams] = useSearchParams();
 
-  const [filters, setFilters] = useState({ date: today(), status: '', department: '', designation: '', employeeId: '', search: '' });
+  const [filters, setFilters] = useState({
+    date: searchParams.get('date') || today(),
+    status: searchParams.get('status') || '',
+    department: '', designation: '', employeeId: '', search: '',
+  });
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(null);
   const [markOpen, setMarkOpen] = useState(false);

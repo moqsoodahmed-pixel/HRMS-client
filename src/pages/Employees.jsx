@@ -73,8 +73,17 @@ export default function Employees() {
 
 function EmployeeListPanel() {
   const navigate = useNavigate();
+  // Deep-link support: the dashboard's "Probation"/"Notice Period" stat
+  // tiles (see pages/Dashboard.jsx) link here with ?status=PROBATION etc.
+  // so the tile is provably not just a static number — it opens this list
+  // pre-filtered to the same employees it counted. Only read once on
+  // mount, same as every other filter here (typing in the filter afterward
+  // works exactly as before).
+  const [searchParams] = useSearchParams();
 
-  const [filters, setFilters] = useState({ search: '', department: '', status: '', employmentType: '', documentStatus: '' });
+  const [filters, setFilters] = useState({
+    search: '', department: '', status: searchParams.get('status') || '', employmentType: '', documentStatus: '',
+  });
   const [page, setPage] = useState(1);
 
   const setFilter = (key, value) => { setFilters((f) => ({ ...f, [key]: value })); setPage(1); };
