@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Clock, CalendarDays, Wallet, FileText, ShieldCheck,
   Megaphone, Package, UserPlus, UserMinus, BarChart3, ScrollText, X,
@@ -128,14 +128,16 @@ function SidebarShell({ onClose, children }) {
   return (
     <>
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-        <div className="flex flex-col gap-1">
+        {/* Logo now links to /dashboard — previously a plain <img> with no
+            navigation at all, so clicking it did nothing. */}
+        <Link to="/dashboard" className="flex flex-col gap-1" onClick={onClose}>
           <img
             src="/dutylaunch-logo.webp"
             alt="DutyLaunch"
             className="h-8 w-auto object-contain"
           />
           <p className="text-xs text-gray-400">HRMS Portal</p>
-        </div>
+        </Link>
         <button type="button" className="btn-ghost lg:hidden" onClick={onClose} aria-label="Close navigation">
           <X className="h-5 w-5" />
         </button>

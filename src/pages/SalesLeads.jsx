@@ -859,32 +859,54 @@ export default function SalesLeads() {
   const isSalesEmployee = role === 'EMPLOYEE' && (salesDept === 'sales' || salesDept.includes('sales') || salesDept.includes('business development'));
   const canSeeRowNumber = isElevated || role === 'HR_ADMIN' || role === 'PROJECT_HEAD' || isSalesEmployee;
 
-  // Reveal state — only one lead at a time, 20s timer
+  // Reveal state — only one lead at a time, 20s timer.
+  //
+  // BUGFIX: this used to decrement `countdown` by 1 on every 1000ms
+  // setInterval tick. That looks right, but a plain tick-counter drifts
+  // badly the moment the browser throttles background-tab timers (Chrome
+  // clamps setInterval to ~1/sec — or much slower — the instant the tab
+  // loses focus, is minimized, or the OS deprioritizes it) or simply
+  // misses a beat under load: when the tab regains focus the browser can
+  // fire several queued ticks back-to-back, so the displayed number jumps
+  // ("skips") several seconds at once and the reveal disappears far
+  // sooner than 20 real seconds. Anchoring the countdown to a fixed
+  // wall-clock end time (`revealUntilRef`) and computing the remaining
+  // seconds from `Date.now()` on every tick makes it self-correcting: no
+  // matter how ticks are delayed, bunched, or dropped, the displayed
+  // number is always the true remaining time, and it can never show a
+  // stale/incorrect countdown or hide early.
   const [revealed, setRevealed] = useState(null); // { leadId, email, phone, countdown }
-  const revealTimerRef = useRef(null);
   const revealCountRef = useRef(null);
+  const revealUntilRef = useRef(null);
+  const REVEAL_SECONDS = 20;
 
   const clearReveal = useCallback(() => {
-    clearInterval(revealTimerRef.current);
     clearInterval(revealCountRef.current);
+    revealCountRef.current = null;
+    revealUntilRef.current = null;
     setRevealed(null);
   }, []);
 
   const handleReveal = useCallback(async (leadId) => {
-    // Cancel any existing reveal first
+    // Cancel any existing reveal first (only one lead revealed at a time).
     clearReveal();
     try {
       const res = await leadsAPI.reveal(leadId);
       const { email, phone } = res.data.data;
-      setRevealed({ leadId, email, phone, countdown: 20 });
-      // Countdown ticker
+      revealUntilRef.current = Date.now() + REVEAL_SECONDS * 1000;
+      setRevealed({ leadId, email, phone, countdown: REVEAL_SECONDS });
+      // Ticks every 250ms so the on-screen number updates smoothly, but the
+      // value shown is always derived from the fixed end time above, never
+      // from counting ticks — see the note above for why that matters.
       revealCountRef.current = setInterval(() => {
-        setRevealed(prev => {
-          if (!prev) return null;
-          if (prev.countdown <= 1) { clearReveal(); return null; }
-          return { ...prev, countdown: prev.countdown - 1 };
-        });
-      }, 1000);
+        const remainingMs = revealUntilRef.current - Date.now();
+        const remainingSeconds = Math.ceil(remainingMs / 1000);
+        if (remainingSeconds <= 0) {
+          clearReveal();
+          return;
+        }
+        setRevealed((prev) => (prev ? { ...prev, countdown: remainingSeconds } : prev));
+      }, 250);
     } catch {
       // silently fail
     }
