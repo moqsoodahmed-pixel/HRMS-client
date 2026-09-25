@@ -20,10 +20,23 @@ export default function Employees() {
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(() => searchParams.get('tab') || 'list');
 
-  // Employee.onboardingStatus already covers every employee (see STEP 1), so
-  // this one list doubles as both the Onboarding Submissions data source and
-  // the Total/Approved/Pending/Rejected summary — no separate counting API.
-  const summaryQuery = useQuery({ queryKey: ['onboarding-profile', 'list', ''], queryFn: () => onboardingProfileAPI.list() });
+  // HR view vs. team-lead view. Only roles that actually administer employees
+  // (HR_ADMIN / PROJECT_HEAD / elevated — see AuthContext `manageEmployees`)
+  // get the company-wide onboarding summary and the Onboarding-Submissions /
+  // Edit-Requests approval tabs. A MANAGER (Sales Team Lead) gets a plain
+  // "My Team" list instead — no company totals, no approval queues — and the
+  // list itself is already scoped to their own reports by the server
+  // (employeeController getEmployees). This is what stops a Sales Team Lead
+  // from seeing all 21 employees / the CEO / other departments.
+  const isHrView = can('manageEmployees');
+
+  // Company onboarding summary — HR view only. Skipped entirely for a team
+  // lead so no company-wide counts are fetched or shown to them.
+  const summaryQuery = useQuery({
+    queryKey: ['onboarding-profile', 'list', ''],
+    queryFn: () => onboardingProfileAPI.list(),
+    enabled: isHrView,
+  });
   const summaryRows = summaryQuery.data?.data?.data || [];
   const counts = {
     total: summaryRows.length,
@@ -37,6 +50,19 @@ export default function Employees() {
     { value: 'onboarding', label: 'Onboarding Submissions', count: counts.pending || undefined },
     { value: 'edit-requests', label: 'Edit Requests' },
   ];
+
+  // ── Team-lead (non-HR) view: just their own team, no admin surface. ──
+  if (!isHrView) {
+    return (
+      <div>
+        <PageHeader
+          title="My Team"
+          subtitle="The people who report to you and their details."
+        />
+        <EmployeeListPanel />
+      </div>
+    );
+  }
 
   return (
     <div>

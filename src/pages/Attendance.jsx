@@ -445,7 +445,7 @@ function AttendanceManagementView() {
           to only manage OTHER people's attendance and had no way for HR
           themselves to check in/out or take a break. Reuses the same
           self-service widget every other employee gets on this page. */}
-      {role === 'HR_ADMIN' && <SelfAttendanceWidget title="My attendance today" />}
+      {['HR_ADMIN', 'MANAGER', 'PROJECT_HEAD', 'IT_HEAD'].includes(role) && <SelfAttendanceWidget title="My attendance today" />}
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>

@@ -86,9 +86,15 @@ export const ROUTE_ACCESS = {
   '/policies': null,
   '/announcements': null,
   '/assets': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'EMPLOYEE', 'DIRECTOR', 'IT_HEAD'],
-  '/onboarding': ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
-  '/offboarding': ['HR_ADMIN', ...TEAM_SCOPED_ROLES, 'DIRECTOR', 'IT_HEAD'],
-  '/reports': ['HR_ADMIN', 'FINANCE', ...TEAM_SCOPED_ROLES, 'AUDITOR', 'DIRECTOR', 'IT_HEAD'],
+  // Onboarding / offboarding administration is an HR function. A MANAGER
+  // (Sales Team Lead) is deliberately dropped from these — a team lead
+  // doesn't run company onboarding/offboarding — while PROJECT_HEAD keeps it.
+  // (They still reach their own onboarding via '/onboarding/me' below.)
+  '/onboarding': ['HR_ADMIN', 'PROJECT_HEAD', 'DIRECTOR', 'IT_HEAD'],
+  '/offboarding': ['HR_ADMIN', 'PROJECT_HEAD', 'DIRECTOR', 'IT_HEAD'],
+  // Company reporting is likewise not a Sales Team Lead function; they get
+  // their team view on the dashboard, Sales Leads, and Daily Reports instead.
+  '/reports': ['HR_ADMIN', 'FINANCE', 'PROJECT_HEAD', 'AUDITOR', 'DIRECTOR', 'IT_HEAD'],
   '/audit': ['AUDITOR', 'DIRECTOR'],
   '/settings': [],
   // Elevated only (FOUNDER_CEO/CTO/SUPER_ADMIN) — matches the server's
