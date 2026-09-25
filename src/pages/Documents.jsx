@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   FileText, Upload, Download, Eye, CheckCircle2, XCircle, Archive, FileCheck, FileClock, FileX,
-  AlertTriangle, Users, Search, Copy, Check, Edit2, Sparkles,
+  AlertTriangle, Users, Search, Copy, Check, Edit2, Sparkles, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { documentAPI, employeeAPI } from '../api/axios';
@@ -15,19 +16,60 @@ import { DOCUMENT_CATEGORIES, documentCategoryGroup } from '../constants';
 import { formatDate, formatFileSize, errorMessage, fieldErrors, downloadBlob, viewBlob } from '../lib/format';
 import ExtractedDocumentPanels from '../components/ExtractedDocumentPanels';
 
+/** Which stat tile a `?docFilter=` value corresponds to, for the banner label. */
+const DOC_FILTER_LABELS = {
+  PENDING: 'Pending Verification — employees with documents still awaiting submission or review',
+  COMPLETE: 'Verified — employees whose required documents are all verified',
+  REJECTED: 'Rejected — employees with a rejected document that needs re-submission',
+};
+
 /**
  * Employee list on the left, document management for the selected employee
  * on the right — same documentAPI/EmployeeDocument model as before, only the
  * layout changed. An EMPLOYEE (no manageDocuments) has no list to browse —
  * they land straight on their own document management area.
+ *
+ * The four stat tiles above are clickable for anyone who can browse the
+ * employee list (HR_ADMIN/CTO/CEO/etc — same `canManage` gate as the list
+ * pane itself): "Pending Verification" and "Rejected" route into the
+ * employee list pre-filtered to `documentStatus=PENDING`/`REJECTED` (see
+ * employeeController's `documentStatus` query filter), "Verified" filters
+ * to `documentStatus=COMPLETE`, and "Expiring in 30 Days" opens a flat,
+ * document-level register (documentAPI.list({ expiringSoon: true })) since
+ * expiry is a per-document fact, not a per-employee one.
  */
 export default function Documents() {
   const { can, employee: ownEmployee } = useAuth();
   const canManage = can('manageDocuments');
   const [selected, setSelected] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Read once on mount so a stat-tile click (which sets the param and
+  // navigates here) seeds the filter; same deep-link pattern used on
+  // Attendance/Employees/SalesLeads elsewhere in this app.
+  const [docFilter, setDocFilter] = useState(() => searchParams.get('docFilter') || '');
+  const [showExpiring, setShowExpiring] = useState(() => searchParams.get('view') === 'expiring');
 
   const statsQuery = useQuery({ queryKey: ['documents', 'stats'], queryFn: () => documentAPI.stats() });
   const stats = statsQuery.data?.data?.data;
+
+  const goToFilter = (filter) => {
+    setShowExpiring(false);
+    setDocFilter(filter);
+    setSelected(null);
+    setSearchParams(filter ? { docFilter: filter } : {});
+  };
+  const goToExpiring = () => {
+    setDocFilter('');
+    setShowExpiring(true);
+    setSelected(null);
+    setSearchParams({ view: 'expiring' });
+  };
+  const clearFilter = () => {
+    setDocFilter('');
+    setShowExpiring(false);
+    setSearchParams({});
+  };
 
   const activeEmployee = canManage ? selected : ownEmployee;
   // Anyone may upload documents to their OWN record — the backend already
@@ -44,19 +86,57 @@ export default function Documents() {
 
       {statsQuery.isLoading ? <StatCardSkeleton count={4} /> : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard label="Pending Verification" value={stats?.pending ?? 0} icon={FileClock} tone="amber" />
-          <StatCard label="Verified" value={stats?.verified ?? 0} icon={FileCheck} tone="green" />
-          <StatCard label="Rejected" value={stats?.rejected ?? 0} icon={FileX} tone="red" />
-          <StatCard label="Expiring in 30 Days" value={stats?.expiringSoon ?? 0} icon={AlertTriangle} tone="purple" hint={`${stats?.archived ?? 0} archived`} />
+          <StatCard
+            label="Pending Verification"
+            value={stats?.pending ?? 0}
+            icon={FileClock}
+            tone="amber"
+            onClick={canManage ? () => goToFilter('PENDING') : undefined}
+          />
+          <StatCard
+            label="Verified"
+            value={stats?.verified ?? 0}
+            icon={FileCheck}
+            tone="green"
+            onClick={canManage ? () => goToFilter('COMPLETE') : undefined}
+          />
+          <StatCard
+            label="Rejected"
+            value={stats?.rejected ?? 0}
+            icon={FileX}
+            tone="red"
+            onClick={canManage ? () => goToFilter('REJECTED') : undefined}
+          />
+          <StatCard
+            label="Expiring in 30 Days"
+            value={stats?.expiringSoon ?? 0}
+            icon={AlertTriangle}
+            tone="purple"
+            hint={`${stats?.archived ?? 0} archived`}
+            onClick={canManage ? goToExpiring : undefined}
+          />
+        </div>
+      )}
+
+      {canManage && (docFilter || showExpiring) && (
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 text-sm text-primary-800">
+          <span>
+            Showing: <strong>{showExpiring ? 'Documents expiring in the next 30 days' : DOC_FILTER_LABELS[docFilter] || docFilter}</strong>
+          </span>
+          <button type="button" onClick={clearFilter} className="flex items-center gap-1 text-xs font-medium text-primary-700 hover:underline">
+            <X className="h-3.5 w-3.5" /> Clear
+          </button>
         </div>
       )}
 
       <div className={`mt-6 grid grid-cols-1 gap-6 ${canManage ? 'lg:grid-cols-[20rem_1fr]' : ''}`}>
-        {canManage && (
-          <EmployeeListPane selected={selected} onSelect={setSelected} />
+        {canManage && !showExpiring && (
+          <EmployeeListPane selected={selected} onSelect={setSelected} documentStatus={docFilter} />
         )}
         <div className="min-w-0">
-          {!activeEmployee ? (
+          {canManage && showExpiring ? (
+            <ExpiringDocumentsPane onSelectEmployee={(emp) => { setShowExpiring(false); setSelected(emp); setSearchParams({}); }} />
+          ) : !activeEmployee ? (
             <div className="card"><EmptyState icon={Users} title="Select an employee" description="Choose an employee on the left to manage their documents." /></div>
           ) : (
             <EmployeeDocumentPane employee={activeEmployee} canManage={canManage} canUpload={canUpload} isOwnRecord={isOwnRecord} />
@@ -68,14 +148,67 @@ export default function Documents() {
 }
 
 /* ------------------------------------------------------------------ */
+/* "Expiring in 30 Days" drill-down — flat, document-level register    */
+/* ------------------------------------------------------------------ */
+
+function ExpiringDocumentsPane({ onSelectEmployee }) {
+  const query = useQuery({
+    queryKey: ['documents', 'list', 'expiring'],
+    queryFn: () => documentAPI.list({ expiringSoon: true, limit: 100 }),
+  });
+  const rows = query.data?.data?.data || [];
+
+  return (
+    <div className="card overflow-hidden">
+      <DataTable
+        columns={[
+          {
+            key: 'employee',
+            header: 'Employee',
+            render: (row) => (
+              <div className="min-w-0">
+                <p className="truncate font-medium text-gray-900">{row.employee?.fullName || '—'}</p>
+                <p className="truncate text-xs text-gray-400">{row.employee?.employeeCode}</p>
+              </div>
+            ),
+          },
+          { key: 'name', header: 'Document', render: (row) => <span className="text-sm">{row.name}<span className="ml-1 text-[11px] text-gray-400">({row.category})</span></span> },
+          { key: 'expiry', header: 'Expires', render: (row) => <span className="text-sm text-amber-700">{row.expiryDate ? formatDate(row.expiryDate) : '—'}</span> },
+          { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status || (row.isVerified ? 'VERIFIED' : 'PENDING')} /> },
+          {
+            key: 'actions',
+            header: 'Actions',
+            render: (row) => (
+              <button
+                type="button"
+                className="text-xs font-medium text-primary-600 hover:underline"
+                onClick={() => onSelectEmployee(row.employee)}
+                disabled={!row.employee?._id}
+              >
+                Manage documents
+              </button>
+            ),
+          },
+        ]}
+        rows={rows}
+        isLoading={query.isLoading}
+        error={query.error}
+        onRetry={query.refetch}
+        empty={<EmptyState icon={AlertTriangle} title="Nothing expiring soon" description="No documents are due to expire in the next 30 days." />}
+      />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Left pane — employee search/select                                  */
 /* ------------------------------------------------------------------ */
 
-function EmployeeListPane({ selected, onSelect }) {
+function EmployeeListPane({ selected, onSelect, documentStatus }) {
   const [search, setSearch] = useState('');
   const query = useQuery({
-    queryKey: ['employees', 'list', 'documents', search],
-    queryFn: () => employeeAPI.list({ search, limit: 50 }),
+    queryKey: ['employees', 'list', 'documents', search, documentStatus],
+    queryFn: () => employeeAPI.list({ search, documentStatus: documentStatus || undefined, limit: 50 }),
   });
   const rows = query.data?.data?.data || [];
 
@@ -290,18 +423,18 @@ function EmployeeDocumentPane({ employee, canManage, canUpload, isOwnRecord: pro
                     (row.extractedData && Object.keys(row.extractedData).length > 0) ||
                     ['Aadhaar Card', 'PAN Card', 'Bank Account Details', 'Cancelled Cheque', 'Educational Certificates', 'Experience Certificate', 'Address Proof'].includes(row.category)
                   )) && (
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline"
-                      onClick={() => {
-                        const el = document.getElementById(`extracted-panel-${row._id}`);
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }}
-                      title="View extracted OCR details"
-                    >
-                      <Sparkles className="h-3.5 w-3.5" /> Details
-                    </button>
-                  )}
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline"
+                        onClick={() => {
+                          const el = document.getElementById(`extracted-panel-${row._id}`);
+                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }}
+                        title="View extracted OCR details"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" /> Details
+                      </button>
+                    )}
                   {canManage && row.status !== 'ARCHIVED' && (
                     <>
                       {row.status !== 'VERIFIED' && (

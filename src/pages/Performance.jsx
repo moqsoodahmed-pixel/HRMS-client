@@ -13,9 +13,46 @@ import {
 import { PERFORMANCE_REVIEW_STATUSES, RATING_LABELS, DEPARTMENTS } from '../constants';
 import { formatDate, errorMessage } from '../lib/format';
 
+/**
+ * A management-tier role (HR_ADMIN, PROJECT_HEAD, MANAGER/"Sales Team Lead",
+ * plus elevated) has `managePerformanceReviews` and therefore used to see
+ * ONLY the admin/review-others view here — with no way to see their OWN
+ * performance, even though HR's/a manager's own performance is judged by
+ * the CEO/CTO/Project Head just like anyone else's (getMyReviews on the
+ * server already supports any authenticated user with a linked Employee
+ * record — GET /performance-reviews/me has no extra role gate — so this is
+ * purely a client-side visibility gap). Anyone who can manage reviews now
+ * gets both views behind a tab switcher; everyone else (plain EMPLOYEE,
+ * FINANCE, DIRECTOR, IT_HEAD, AUDITOR) keeps seeing just their own reviews.
+ */
 export default function Performance() {
   const { can } = useAuth();
-  return can('managePerformanceReviews') ? <PerformanceAdminView /> : <MyReviewsView />;
+  const canManage = can('managePerformanceReviews');
+  const [tab, setTab] = useState('team');
+
+  if (!canManage) return <MyReviewsView />;
+
+  return (
+    <div>
+      <div className="mb-4 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+        <button
+          type="button"
+          onClick={() => setTab('team')}
+          className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${tab === 'team' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Team Reviews
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('mine')}
+          className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${tab === 'mine' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          My Performance
+        </button>
+      </div>
+      {tab === 'team' ? <PerformanceAdminView /> : <MyReviewsView embedded />}
+    </div>
+  );
 }
 
 function RatingStars({ value }) {
@@ -32,14 +69,17 @@ function RatingStars({ value }) {
 /* Employee view — own submitted/completed reviews only                */
 /* ------------------------------------------------------------------ */
 
-function MyReviewsView() {
+function MyReviewsView({ embedded = false }) {
   const [viewing, setViewing] = useState(null);
   const query = useQuery({ queryKey: ['performance', 'my-reviews'], queryFn: () => performanceAPI.myReviews() });
   const rows = query.data?.data?.data || [];
 
   return (
     <div>
-      <PageHeader title="My Performance" subtitle="Your performance reviews and feedback" />
+      <PageHeader
+        title="My Performance"
+        subtitle={embedded ? 'Reviews written about you by the CEO, CTO, or your Project Head' : 'Your performance reviews and feedback'}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatCard label="Reviews Received" value={rows.length} icon={ClipboardList} tone="indigo" />
