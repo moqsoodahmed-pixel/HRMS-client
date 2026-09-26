@@ -122,6 +122,17 @@ export function StatusBadge({ status, label, tone }) {
   );
 }
 
+/**
+ * Every "clickable" stat/summary/KPI card in the app renders through this
+ * one component, so the premium hover/press feel and keyboard/ARIA support
+ * only need to live here once — any page that passes `onClick` gets it for
+ * free, and any page that later grows an `onClick` inherits the same feel
+ * automatically. A native `<button>` already gives Enter/Space activation
+ * and a browser focus outline for free; this only adds the visual polish
+ * (elevation, subtle lift, icon nudge, border glow, ~1.02 scale, ~200ms
+ * easing) and an explicit `aria-label` so a screen reader announces the
+ * metric ("Pending Verification: 8"), not just "button".
+ */
 export function StatCard({ label, value, icon: Icon, tone = 'indigo', hint, onClick }) {
   const tones = {
     indigo: 'bg-primary-50 text-primary-600',
@@ -135,8 +146,12 @@ export function StatCard({ label, value, icon: Icon, tone = 'indigo', hint, onCl
   const Wrapper = onClick ? 'button' : 'div';
   return (
     <Wrapper
-      {...(onClick ? { type: 'button', onClick } : {})}
-      className={`card p-5 text-left ${onClick ? 'transition hover:border-primary-300 hover:shadow' : ''}`}
+      {...(onClick ? {
+        type: 'button',
+        onClick,
+        'aria-label': hint ? `${label}: ${value} (${hint})` : `${label}: ${value}`,
+      } : {})}
+      className={`card group p-5 text-left ${onClick ? 'cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-primary-300/70 hover:shadow-lg hover:shadow-primary-100/50 active:translate-y-0 active:scale-[0.99] active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 [&:hover]:scale-[1.02]' : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -145,7 +160,7 @@ export function StatCard({ label, value, icon: Icon, tone = 'indigo', hint, onCl
           {hint && <p className="mt-1 truncate text-xs text-gray-400">{hint}</p>}
         </div>
         {Icon && (
-          <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${tones[tone]}`}>
+          <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition-transform duration-200 ${tones[tone]} ${onClick ? 'group-hover:scale-110 group-hover:rotate-3' : ''}`}>
             <Icon className="h-5 w-5" />
           </div>
         )}
@@ -290,8 +305,8 @@ export function Tabs({ tabs, active, onChange }) {
               type="button"
               onClick={() => onChange(value)}
               className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition ${active === value
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-800'
+                ? 'border-primary-600 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
                 }`}
             >
               {label}

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   Database, RefreshCw, ShieldCheck, Users, Phone, Building2, ClipboardCheck,
 } from 'lucide-react';
@@ -37,6 +38,7 @@ function Breakdown({ title, icon: Icon, rows, labelKey, valueKey = 'count', empt
 }
 
 export default function DataHealth() {
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: ['diagnostics', 'data-health'],
     queryFn: () => diagnosticsAPI.dataHealth(),
@@ -80,14 +82,15 @@ export default function DataHealth() {
           <p className="mb-4 text-xs text-gray-400">Generated {formatDateTime(data.generatedAt)}</p>
 
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total Leads" value={data.leads.total} icon={Phone} tone="indigo" />
-            <StatCard label="Unassigned Leads" value={data.leads.unassigned} icon={Phone} tone={data.leads.unassigned > 0 ? 'amber' : 'green'} />
-            <StatCard label="Active Employees" value={data.employees.totalActive} icon={Users} tone="blue" />
+            <StatCard label="Total Leads" value={data.leads.total} icon={Phone} tone="indigo" onClick={() => navigate('/sales-leads')} />
+            <StatCard label="Unassigned Leads" value={data.leads.unassigned} icon={Phone} tone={data.leads.unassigned > 0 ? 'amber' : 'green'} onClick={() => navigate('/sales-leads')} />
+            <StatCard label="Active Employees" value={data.employees.totalActive} icon={Users} tone="blue" onClick={() => navigate('/employees?status=ACTIVE')} />
             <StatCard
               label="Onboarding Not Approved"
               value={data.employees.byOnboardingStatus.filter((r) => r.status !== 'APPROVED').reduce((sum, r) => sum + r.count, 0)}
               icon={ClipboardCheck}
               tone="amber"
+              onClick={() => navigate('/employees?tab=onboarding')}
             />
           </div>
 
@@ -108,7 +111,7 @@ export default function DataHealth() {
             <Breakdown title="Employees by Employment Status" icon={Users} rows={data.employees.byEmploymentStatus} labelKey="status" />
             <Breakdown title="Employees by Onboarding Status" icon={ClipboardCheck} rows={data.employees.byOnboardingStatus} labelKey="status" />
             <Breakdown title="Login Accounts by Role" icon={ShieldCheck} rows={data.users.byRole} labelKey="role" />
-            <StatCard label="Inactive Login Accounts" value={data.users.inactiveAccounts} icon={Users} tone="gray" />
+            <StatCard label="Inactive Login Accounts" value={data.users.inactiveAccounts} icon={Users} tone="gray" onClick={() => document.querySelector('h3')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
           </div>
         </>
       )}

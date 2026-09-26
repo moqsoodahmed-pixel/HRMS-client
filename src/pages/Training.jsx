@@ -26,9 +26,14 @@ export default function Training() {
 function MyTrainingView() {
   const queryClient = useQueryClient();
   const [viewing, setViewing] = useState(null);
+  // Stat tiles below filter this same list client-side rather than routing
+  // anywhere else — this page IS the destination for "my training", so a
+  // click just narrows the table to the tile's subset.
+  const [statusFilter, setStatusFilter] = useState('');
 
   const query = useQuery({ queryKey: ['training', 'my-assignments'], queryFn: () => trainingAPI.myAssignments() });
-  const rows = query.data?.data?.data || [];
+  const allRows = query.data?.data?.data || [];
+  const rows = statusFilter ? allRows.filter((r) => r.status === statusFilter) : allRows;
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['training'] });
 
@@ -38,18 +43,24 @@ function MyTrainingView() {
     onError: (err) => toast.error(errorMessage(err)),
   });
 
-  const total = rows.length;
-  const completed = rows.filter((r) => r.status === 'COMPLETED').length;
+  const total = allRows.length;
+  const completed = allRows.filter((r) => r.status === 'COMPLETED').length;
 
   return (
     <div>
       <PageHeader title="Training Module" subtitle="Your assigned training materials" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Assigned to Me" value={total} icon={GraduationCap} tone="indigo" />
-        <StatCard label="Completed" value={completed} icon={CheckCircle2} tone="green" />
-        <StatCard label="Completion Rate" value={total ? `${Math.round((completed / total) * 100)}%` : '—'} icon={ListChecks} tone="purple" />
+        <StatCard label="Assigned to Me" value={total} icon={GraduationCap} tone="indigo" onClick={() => setStatusFilter('')} />
+        <StatCard label="Completed" value={completed} icon={CheckCircle2} tone="green" onClick={() => setStatusFilter('COMPLETED')} />
+        <StatCard label="Completion Rate" value={total ? `${Math.round((completed / total) * 100)}%` : '—'} icon={ListChecks} tone="purple" onClick={() => setStatusFilter('COMPLETED')} />
       </div>
+      {statusFilter && (
+        <p className="mt-3 text-xs text-gray-500">
+          Showing: <strong>{statusFilter === 'COMPLETED' ? 'Completed' : statusFilter}</strong> ·{' '}
+          <button type="button" className="text-primary-600 hover:underline" onClick={() => setStatusFilter('')}>Clear</button>
+        </p>
+      )}
 
       <div className="mt-6">
         <DataTable
@@ -176,10 +187,10 @@ function TrainingAdminView() {
 
       {statsQuery.isLoading ? <StatCardSkeleton count={4} /> : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard label="Total Trainings" value={stats?.totalTrainings ?? 0} icon={GraduationCap} tone="indigo" />
-          <StatCard label="Active Trainings" value={stats?.activeTrainings ?? 0} icon={CheckCircle2} tone="green" />
-          <StatCard label="Assigned" value={stats?.totalAssignments ?? 0} icon={Users} tone="blue" hint={`${stats?.completed ?? 0} completed`} />
-          <StatCard label="Completion Rate" value={stats?.completionRate != null ? `${stats.completionRate}%` : '—'} icon={ListChecks} tone="purple" />
+          <StatCard label="Total Trainings" value={stats?.totalTrainings ?? 0} icon={GraduationCap} tone="indigo" onClick={() => setIncludeInactive(true)} />
+          <StatCard label="Active Trainings" value={stats?.activeTrainings ?? 0} icon={CheckCircle2} tone="green" onClick={() => setIncludeInactive(false)} />
+          <StatCard label="Assigned" value={stats?.totalAssignments ?? 0} icon={Users} tone="blue" hint={`${stats?.completed ?? 0} completed`} onClick={() => document.querySelector('table')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+          <StatCard label="Completion Rate" value={stats?.completionRate != null ? `${stats.completionRate}%` : '—'} icon={ListChecks} tone="purple" onClick={() => document.querySelector('table')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
         </div>
       )}
 

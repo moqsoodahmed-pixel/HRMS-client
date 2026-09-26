@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Wallet, Download, Plus, FileSpreadsheet, TrendingDown, Users, CircleDollarSign, Receipt, BadgeCheck,
   ArrowRight, Check, X, Ban, ClipboardList,
@@ -25,6 +25,15 @@ export default function Payroll() {
   const isPayrollUser = can('viewPayroll');
   const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState(params.get('tab') === 'compensation' ? 'compensation' : 'payslips');
+
+  // Re-sync when `?tab=` changes after mount too, not just on first render —
+  // this is what lets PayrollSummary's stat tiles (which navigate here with
+  // `?tab=payslips`/`?tab=compensation`) actually switch the visible tab
+  // when the user is already on this page, not only on a fresh page load.
+  useEffect(() => {
+    const t = params.get('tab');
+    if (t === 'compensation' || t === 'payslips' || t === 'structures') setTab(t);
+  }, [params]);
 
   const changeTab = (value) => {
     setTab(value);
@@ -64,6 +73,12 @@ export default function Payroll() {
 /* ------------------------------------------------------------------ */
 
 export function PayrollSummary() {
+  // Reused standalone (e.g. Attendance.jsx's payroll widget) as well as
+  // inside Payroll() itself — `navigate('/payroll?tab=...')` works either
+  // way: from elsewhere it's a normal route change, from Payroll() itself
+  // the `useEffect` above picks up the new `?tab=` and switches tabs in
+  // place, no full remount.
+  const navigate = useNavigate();
   const [period, setPeriod] = useState({ month: now.getMonth() + 1, year: now.getFullYear() });
   const { data, isLoading } = useQuery({
     queryKey: ['payroll', 'summary', period],
@@ -95,18 +110,18 @@ export function PayrollSummary() {
 
       {isLoading ? <StatCardSkeleton count={4} /> : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard label="Payroll Status" value={humanise(s?.status || 'NOT_STARTED')} icon={ClipboardList} tone={s?.status === 'COMPLETE' ? 'green' : s?.status === 'IN_PROGRESS' ? 'amber' : 'gray'} hint={`${monthName(period.month)} ${period.year}`} />
-          <StatCard label="Employees Included" value={s?.activeStructures ?? 0} icon={Users} tone="indigo" hint={`${s?.activeEmployees ?? 0} active employees total`} />
-          <StatCard label="Payslips Issued" value={s?.payslipCount ?? 0} icon={Receipt} tone="blue" hint={`${s?.employeesPaid ?? 0} paid`} />
-          <StatCard label="Pending Actions" value={s?.pendingActions ?? 0} icon={TrendingDown} tone={s?.pendingActions ? 'amber' : 'green'} hint="Employees without a payslip yet" />
+          <StatCard label="Payroll Status" value={humanise(s?.status || 'NOT_STARTED')} icon={ClipboardList} tone={s?.status === 'COMPLETE' ? 'green' : s?.status === 'IN_PROGRESS' ? 'amber' : 'gray'} hint={`${monthName(period.month)} ${period.year}`} onClick={() => navigate('/payroll?tab=payslips')} />
+          <StatCard label="Employees Included" value={s?.activeStructures ?? 0} icon={Users} tone="indigo" hint={`${s?.activeEmployees ?? 0} active employees total`} onClick={() => navigate('/payroll?tab=structures')} />
+          <StatCard label="Payslips Issued" value={s?.payslipCount ?? 0} icon={Receipt} tone="blue" hint={`${s?.employeesPaid ?? 0} paid`} onClick={() => navigate('/payroll?tab=payslips')} />
+          <StatCard label="Pending Actions" value={s?.pendingActions ?? 0} icon={TrendingDown} tone={s?.pendingActions ? 'amber' : 'green'} hint="Employees without a payslip yet" onClick={() => navigate('/payroll?tab=structures')} />
         </div>
       )}
 
       {!isLoading && !noPayrollYet && (
         <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
-          <StatCard label="Total Payroll" value={formatCurrency(s?.grossPayroll, { compact: true })} icon={CircleDollarSign} tone="indigo" />
-          <StatCard label="Total Deductions" value={formatCurrency(s?.totalDeductions, { compact: true })} icon={TrendingDown} tone="red" />
-          <StatCard label="Net Payroll" value={formatCurrency(s?.netPayroll, { compact: true })} icon={Wallet} tone="purple" />
+          <StatCard label="Total Payroll" value={formatCurrency(s?.grossPayroll, { compact: true })} icon={CircleDollarSign} tone="indigo" onClick={() => navigate('/reports?tab=payroll')} />
+          <StatCard label="Total Deductions" value={formatCurrency(s?.totalDeductions, { compact: true })} icon={TrendingDown} tone="red" onClick={() => navigate('/reports?tab=payroll')} />
+          <StatCard label="Net Payroll" value={formatCurrency(s?.netPayroll, { compact: true })} icon={Wallet} tone="purple" onClick={() => navigate('/payroll?tab=payslips')} />
         </div>
       )}
 

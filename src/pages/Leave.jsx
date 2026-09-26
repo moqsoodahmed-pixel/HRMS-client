@@ -38,16 +38,25 @@ export default function Leave() {
 
   const isHolidays = tab === 'holidays';
 
+  // Which status LeaveSummary's tiles pre-filter the "Requests" tab to when
+  // clicked. Kept here (not inside LeaveRequests) since the summary tiles
+  // live above the tab switcher and need to change BOTH the active tab and
+  // that tab's filter; `key` below forces LeaveRequests to re-seed its own
+  // filter state from the new value, same pattern used for Employees.jsx's
+  // onboarding-status tiles.
+  const [requestsStatusFilter, setRequestsStatusFilter] = useState(() => searchParams.get('status') || '');
+  const goToRequests = (status) => { setRequestsStatusFilter(status); setTab('requests'); };
+
   return (
     <div>
       <PageHeader
         title={isHolidays ? 'Holiday Calendar' : 'Leave Management'}
         subtitle={isHolidays ? 'Manage company holidays' : 'Requests, balances, holidays and leave policy setup'}
       />
-      {!isHolidays && <LeaveSummary />}
+      {!isHolidays && <LeaveSummary onStatClick={goToRequests} onBalances={() => setTab('balances')} />}
       <div className="mt-6">
         <Tabs tabs={tabs} active={tab} onChange={setTab} />
-        {tab === 'requests' && <LeaveRequests />}
+        {tab === 'requests' && <LeaveRequests key={requestsStatusFilter} initialStatus={requestsStatusFilter} />}
         {tab === 'balances' && <LeaveBalances />}
         {tab === 'holidays' && <Holidays />}
         {tab === 'types' && <LeaveTypes />}
@@ -58,7 +67,7 @@ export default function Leave() {
 
 /* ------------------------------------------------------------------ */
 
-function LeaveSummary() {
+function LeaveSummary({ onStatClick, onBalances }) {
   const { data, isLoading } = useQuery({
     queryKey: ['leave', 'stats'],
     queryFn: () => leaveAPI.stats(),
@@ -68,22 +77,22 @@ function LeaveSummary() {
   if (isLoading) return <StatCardSkeleton count={5} />;
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-      <StatCard label="Available Leave" value={stats?.hasOwnBalance ? `${stats.availableDays} d` : '—'} icon={Wallet} tone="indigo" hint={stats?.hasOwnBalance ? 'Across all leave types' : 'No employee profile linked'} />
-      <StatCard label="Used Leave" value={stats?.hasOwnBalance ? `${stats.usedDays} d` : '—'} icon={CalendarDays} tone="purple" />
-      <StatCard label="Pending Requests" value={stats?.pending ?? 0} icon={Clock} tone="amber" />
-      <StatCard label="Approved" value={stats?.approved ?? 0} icon={CheckCircle2} tone="green" hint={`${stats?.approvedDays ?? 0} day(s)`} />
-      <StatCard label="Rejected" value={stats?.rejected ?? 0} icon={XCircle} tone="red" />
+      <StatCard label="Available Leave" value={stats?.hasOwnBalance ? `${stats.availableDays} d` : '—'} icon={Wallet} tone="indigo" hint={stats?.hasOwnBalance ? 'Across all leave types' : 'No employee profile linked'} onClick={onBalances} />
+      <StatCard label="Used Leave" value={stats?.hasOwnBalance ? `${stats.usedDays} d` : '—'} icon={CalendarDays} tone="purple" onClick={onBalances} />
+      <StatCard label="Pending Requests" value={stats?.pending ?? 0} icon={Clock} tone="amber" onClick={() => onStatClick('PENDING')} />
+      <StatCard label="Approved" value={stats?.approved ?? 0} icon={CheckCircle2} tone="green" hint={`${stats?.approvedDays ?? 0} day(s)`} onClick={() => onStatClick('APPROVED')} />
+      <StatCard label="Rejected" value={stats?.rejected ?? 0} icon={XCircle} tone="red" onClick={() => onStatClick('REJECTED')} />
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
 
-export function LeaveRequests() {
+export function LeaveRequests({ initialStatus = '' } = {}) {
   const { can } = useAuth();
   const queryClient = useQueryClient();
 
-  const [filters, setFilters] = useState({ status: '', leaveType: '', startDate: '', endDate: '', department: '', search: '', employeeId: '' });
+  const [filters, setFilters] = useState({ status: initialStatus, leaveType: '', startDate: '', endDate: '', department: '', search: '', employeeId: '' });
   const [page, setPage] = useState(1);
   const [applyOpen, setApplyOpen] = useState(false);
   const [rejecting, setRejecting] = useState(null);
@@ -410,10 +419,10 @@ function ApplyLeaveModal({ open, onClose, leaveTypes, onSaved }) {
   const selectedTypeObj = leaveTypes.find((t) => t._id === form.leaveType);
   const selectedCategory = selectedTypeObj
     ? (selectedTypeObj.code?.toUpperCase() === 'CASUAL' || selectedTypeObj.name?.toLowerCase().includes('casual')
-        ? 'CASUAL'
-        : selectedTypeObj.code?.toUpperCase() === 'ANNUAL' || selectedTypeObj.name?.toLowerCase().includes('annual')
-          ? 'ANNUAL'
-          : null)
+      ? 'CASUAL'
+      : selectedTypeObj.code?.toUpperCase() === 'ANNUAL' || selectedTypeObj.name?.toLowerCase().includes('annual')
+        ? 'ANNUAL'
+        : null)
     : null;
 
   const availableSubTypes = selectedCategory ? (LEAVE_SUBTYPES[selectedCategory] || []) : [];

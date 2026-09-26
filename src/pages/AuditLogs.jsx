@@ -42,20 +42,20 @@ export default function AuditLogs() {
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Total Entries" value={meta?.total ?? 0} icon={ScrollText} tone="indigo" />
-        <StatCard label="Modules Tracked" value={modules.length} icon={ScrollText} tone="blue" />
-        <StatCard label="Action Types" value={actions.length} icon={ScrollText} tone="purple" />
+        <StatCard label="Total Entries" value={meta?.total ?? 0} icon={ScrollText} tone="indigo" onClick={resetFilters} />
+        <StatCard label="Modules Tracked" value={modules.length} icon={ScrollText} tone="blue" onClick={() => document.querySelector('[data-audit-module-select]')?.focus()} />
+        <StatCard label="Action Types" value={actions.length} icon={ScrollText} tone="purple" onClick={() => document.querySelector('[data-audit-action-select]')?.focus()} />
       </div>
 
       <FilterBar onReset={resetFilters}>
         <SearchInput className="min-w-[14rem] flex-1" value={filters.search} onChange={(v) => setFilter('search', v)} placeholder="Search user, record, action…" />
         <div>
           <label className="label">Module</label>
-          <Select className="w-40" value={filters.module} onChange={(e) => setFilter('module', e.target.value)} options={modules} placeholder="All modules" />
+          <Select data-audit-module-select className="w-40" value={filters.module} onChange={(e) => setFilter('module', e.target.value)} options={modules} placeholder="All modules" />
         </div>
         <div>
           <label className="label">Action</label>
-          <Select className="w-48" value={filters.action} onChange={(e) => setFilter('action', e.target.value)} options={actions} placeholder="All actions" />
+          <Select data-audit-action-select className="w-48" value={filters.action} onChange={(e) => setFilter('action', e.target.value)} options={actions} placeholder="All actions" />
         </div>
         <div>
           <label className="label">From</label>

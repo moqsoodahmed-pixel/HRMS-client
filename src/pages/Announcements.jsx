@@ -139,9 +139,9 @@ export default function Announcements() {
 
       {query.isLoading ? <StatCardSkeleton count={3} /> : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard label="Total Announcements" value={meta?.total ?? rows.length} icon={Megaphone} tone="indigo" />
-          <StatCard label="Unread" value={meta?.unreadCount ?? rows.filter((r) => !r.isRead).length} icon={BellRing} tone="amber" />
-          <StatCard label="Urgent" value={rows.filter((r) => r.priority === 'URGENT').length} icon={Mail} tone="red" />
+          <StatCard label="Total Announcements" value={meta?.total ?? rows.length} icon={Megaphone} tone="indigo" onClick={() => setFilters({ search: '', priority: '', status: '', unreadOnly: false })} />
+          <StatCard label="Unread" value={meta?.unreadCount ?? rows.filter((r) => !r.isRead).length} icon={BellRing} tone="amber" onClick={() => setFilter('unreadOnly', true)} />
+          <StatCard label="Urgent" value={rows.filter((r) => r.priority === 'URGENT').length} icon={Mail} tone="red" onClick={() => setFilter('priority', 'URGENT')} />
         </div>
       )}
 
@@ -304,9 +304,8 @@ function AnnouncementFormModal({ open, announcement, onClose, onSaved }) {
                   type="button"
                   key={d}
                   onClick={() => toggleDept(d)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                    form.targetDepartments.includes(d) ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                  }`}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${form.targetDepartments.includes(d) ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
                 >
                   {d}
                 </button>

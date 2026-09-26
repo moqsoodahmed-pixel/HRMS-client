@@ -40,10 +40,10 @@ function OnboardingOverview({ onSelect }) {
 
       {query.isLoading ? <StatCardSkeleton count={4} /> : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard label="Total in Onboarding" value={meta?.total ?? 0} icon={UserPlus} tone="indigo" />
-          <StatCard label="Not Started" value={meta?.notStarted ?? 0} icon={Clock} tone="gray" />
-          <StatCard label="In Progress" value={meta?.inProgress ?? 0} icon={ListChecks} tone="blue" />
-          <StatCard label="Completed" value={meta?.completed ?? 0} icon={CheckCircle2} tone="green" />
+          <StatCard label="Total in Onboarding" value={meta?.total ?? 0} icon={UserPlus} tone="indigo" onClick={() => setFilters((f) => ({ ...f, status: '' }))} />
+          <StatCard label="Not Started" value={meta?.notStarted ?? 0} icon={Clock} tone="gray" onClick={() => setFilters((f) => ({ ...f, status: 'NOT_STARTED' }))} />
+          <StatCard label="In Progress" value={meta?.inProgress ?? 0} icon={ListChecks} tone="blue" onClick={() => setFilters((f) => ({ ...f, status: 'IN_PROGRESS' }))} />
+          <StatCard label="Completed" value={meta?.completed ?? 0} icon={CheckCircle2} tone="green" onClick={() => setFilters((f) => ({ ...f, status: 'COMPLETED' }))} />
         </div>
       )}
 

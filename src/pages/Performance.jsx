@@ -82,16 +82,17 @@ function MyReviewsView({ embedded = false }) {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <StatCard label="Reviews Received" value={rows.length} icon={ClipboardList} tone="indigo" />
+        <StatCard label="Reviews Received" value={rows.length} icon={ClipboardList} tone="indigo" onClick={() => document.getElementById('my-reviews-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
         <StatCard
           label="Average Rating"
           value={rows.length ? (rows.reduce((s, r) => s + (r.overallRating || 0), 0) / rows.filter((r) => r.overallRating).length || 0).toFixed(1) : '—'}
           icon={Award}
           tone="purple"
+          onClick={() => document.getElementById('my-reviews-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
         />
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6" id="my-reviews-table">
         <DataTable
           columns={[
             { key: 'period', header: 'Review Period', render: (r) => r.reviewPeriod },
@@ -180,9 +181,9 @@ function PerformanceAdminView() {
 
       {statsQuery.isLoading ? <StatCardSkeleton count={3} /> : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard label="Total Reviews" value={stats?.total ?? 0} icon={ClipboardList} tone="indigo" />
-          <StatCard label="Active Reviews" value={(stats?.draft ?? 0) + (stats?.submitted ?? 0)} icon={FileText} tone="amber" hint={`${stats?.draft ?? 0} draft, ${stats?.submitted ?? 0} submitted`} />
-          <StatCard label="Completed" value={stats?.completed ?? 0} icon={CheckCircle2} tone="green" />
+          <StatCard label="Total Reviews" value={stats?.total ?? 0} icon={ClipboardList} tone="indigo" onClick={() => setFilter('status', '')} />
+          <StatCard label="Active Reviews" value={(stats?.draft ?? 0) + (stats?.submitted ?? 0)} icon={FileText} tone="amber" hint={`${stats?.draft ?? 0} draft, ${stats?.submitted ?? 0} submitted`} onClick={() => setFilter('status', 'SUBMITTED')} />
+          <StatCard label="Completed" value={stats?.completed ?? 0} icon={CheckCircle2} tone="green" onClick={() => setFilter('status', 'COMPLETED')} />
         </div>
       )}
 

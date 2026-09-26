@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Package, Plus, UserPlus, Undo2, History, Boxes, CheckCircle2, Wrench, XCircle,
@@ -19,7 +20,8 @@ export default function Assets() {
   const { can } = useAuth();
   const queryClient = useQueryClient();
 
-  const [filters, setFilters] = useState({ search: '', status: '', type: '' });
+  const [searchParams] = useSearchParams();
+  const [filters, setFilters] = useState({ search: '', status: searchParams.get('status') || '', type: '' });
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -115,11 +117,11 @@ export default function Assets() {
 
       {statsQuery.isLoading ? <StatCardSkeleton count={5} /> : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <StatCard label="Total Assets" value={stats?.total ?? 0} icon={Boxes} tone="indigo" hint={formatCurrency(stats?.totalValue, { compact: true })} />
-          <StatCard label="Available" value={stats?.available ?? 0} icon={CheckCircle2} tone="green" />
-          <StatCard label="Assigned" value={stats?.assigned ?? 0} icon={Package} tone="blue" />
-          <StatCard label="Maintenance" value={stats?.maintenance ?? 0} icon={Wrench} tone="amber" />
-          <StatCard label="Retired" value={stats?.retired ?? 0} icon={XCircle} tone="red" hint={`${stats?.returned ?? 0} returned to date`} />
+          <StatCard label="Total Assets" value={stats?.total ?? 0} icon={Boxes} tone="indigo" hint={formatCurrency(stats?.totalValue, { compact: true })} onClick={() => setFilter('status', '')} />
+          <StatCard label="Available" value={stats?.available ?? 0} icon={CheckCircle2} tone="green" onClick={() => setFilter('status', 'AVAILABLE')} />
+          <StatCard label="Assigned" value={stats?.assigned ?? 0} icon={Package} tone="blue" onClick={() => setFilter('status', 'ASSIGNED')} />
+          <StatCard label="Maintenance" value={stats?.maintenance ?? 0} icon={Wrench} tone="amber" onClick={() => setFilter('status', 'MAINTENANCE')} />
+          <StatCard label="Retired" value={stats?.retired ?? 0} icon={XCircle} tone="red" hint={`${stats?.returned ?? 0} returned to date`} onClick={() => setFilter('status', 'RETIRED')} />
         </div>
       )}
 

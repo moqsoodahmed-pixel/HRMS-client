@@ -138,9 +138,15 @@ export default function Policies() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Published Policies" value={counts.published} icon={ShieldCheck} tone="green" />
-        <StatCard label="Drafts" value={counts.draft} icon={FileSignature} tone="gray" />
-        <StatCard label="Awaiting My Acknowledgement" value={counts.pendingAck} icon={CheckCircle2} tone="amber" />
+        <StatCard label="Published Policies" value={counts.published} icon={ShieldCheck} tone="green" onClick={() => setFilters((f) => ({ ...f, status: 'PUBLISHED' }))} />
+        <StatCard label="Drafts" value={counts.draft} icon={FileSignature} tone="gray" onClick={() => setFilters((f) => ({ ...f, status: 'DRAFT' }))} />
+        <StatCard
+          label="Awaiting My Acknowledgement"
+          value={counts.pendingAck}
+          icon={CheckCircle2}
+          tone="amber"
+          onClick={() => setFilters((f) => ({ ...f, status: 'PUBLISHED' }))}
+        />
       </div>
 
       <div className="mt-6">

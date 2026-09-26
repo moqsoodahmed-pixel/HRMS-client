@@ -416,6 +416,8 @@ function AttendanceManagementView() {
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(() => searchParams.get('tab') || 'submissions');
   const [week, setWeek] = useState(() => toDateInput(new Date()));
+  const [requestsStatusFilter, setRequestsStatusFilter] = useState(() => searchParams.get('status') || 'PENDING');
+  const goToRequests = (status) => { setRequestsStatusFilter(status); setTab('submissions'); };
   const range = weekRangeOf(week);
 
   const statsQuery = useQuery({
@@ -461,17 +463,17 @@ function AttendanceManagementView() {
 
       {statsQuery.isLoading ? <StatCardSkeleton count={5} /> : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <StatCard label="Pending Requests" value={pending} icon={ClipboardList} tone="amber" />
-          <StatCard label="Approved Requests" value={approved} icon={UserCheck} tone="green" />
-          <StatCard label="Rejected Requests" value={rejected} icon={UserX} tone="red" />
-          <StatCard label="Avg Hours" value={stats?.avgHours != null ? `${stats.avgHours}h` : '—'} icon={Timer} tone="indigo" />
-          <StatCard label="Attendance %" value={stats?.attendancePercent != null ? `${stats.attendancePercent}%` : '—'} icon={TrendingUp} tone="purple" />
+          <StatCard label="Pending Requests" value={pending} icon={ClipboardList} tone="amber" onClick={() => goToRequests('PENDING')} />
+          <StatCard label="Approved Requests" value={approved} icon={UserCheck} tone="green" onClick={() => goToRequests('APPROVED')} />
+          <StatCard label="Rejected Requests" value={rejected} icon={UserX} tone="red" onClick={() => goToRequests('REJECTED')} />
+          <StatCard label="Avg Hours" value={stats?.avgHours != null ? `${stats.avgHours}h` : '—'} icon={Timer} tone="indigo" onClick={() => setTab('history')} />
+          <StatCard label="Attendance %" value={stats?.attendancePercent != null ? `${stats.attendancePercent}%` : '—'} icon={TrendingUp} tone="purple" onClick={() => setTab('history')} />
         </div>
       )}
 
       <div className="mt-6">
         <Tabs tabs={tabs} active={tab} onChange={setTab} />
-        {tab === 'submissions' && <AttendanceRequestsPanel type="CORRECTION" />}
+        {tab === 'submissions' && <AttendanceRequestsPanel key={requestsStatusFilter} type="CORRECTION" initialStatus={requestsStatusFilter} />}
         {tab === 'unlock' && <AttendanceRequestsPanel type="UNLOCK" />}
         {tab === 'shifts' && <ShiftAssignmentPanel />}
         {tab === 'history' && <AttendanceHistoryPanel />}
@@ -491,10 +493,10 @@ const REQUEST_TYPE_META = {
   UNLOCK: { label: 'Unlock Requests', icon: Unlock, empty: 'No Requests Found' },
 };
 
-function AttendanceRequestsPanel({ type }) {
+function AttendanceRequestsPanel({ type, initialStatus = 'PENDING' }) {
   const { can } = useAuth();
   const canDecide = can('manageAttendance');
-  const [status, setStatus] = useState('PENDING');
+  const [status, setStatus] = useState(initialStatus);
   const [rejecting, setRejecting] = useState(null);
   const queryClient = useQueryClient();
   const meta = REQUEST_TYPE_META[type];

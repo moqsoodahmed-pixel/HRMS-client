@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Users, Clock, CalendarDays, Wallet, Package, UserPlus, UserMinus, Printer, Download,
@@ -28,8 +29,17 @@ const TABS = [
 
 export default function Reports() {
   const { can } = useAuth();
-  const [tab, setTab] = useState('employees');
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(() => {
+    const t = params.get('tab');
+    return TABS.some((x) => x.value === t) ? t : 'employees';
+  });
   const [department, setDepartment] = useState('');
+
+  useEffect(() => {
+    const t = params.get('tab');
+    if (t && TABS.some((x) => x.value === t)) setTab(t);
+  }, [params]);
 
   const visibleTabs = TABS.filter((t) => t.value !== 'payroll' || can('viewPayrollReports'));
 
@@ -79,6 +89,7 @@ function ReportToolbar({ department, setDepartment, extra, onExport }) {
 /* ------------------------------------------------------------------ */
 
 function EmployeeReport({ department, setDepartment }) {
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: ['reports', 'employees', department],
     queryFn: () => reportAPI.employees({ department }),
@@ -104,10 +115,10 @@ function EmployeeReport({ department, setDepartment }) {
         ], data.employees)}
       />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Total Employees" value={formatNumber(data.summary.total)} icon={Users} tone="indigo" />
-        <StatCard label="Active" value={formatNumber(data.summary.active)} icon={Users} tone="green" />
-        <StatCard label="On Notice / Probation" value={formatNumber(data.summary.noticePeriod + data.summary.probation)} icon={Users} tone="amber" />
-        <StatCard label="Joined / Exited This Month" value={`${data.summary.joinedThisMonth} / ${data.summary.exitedThisMonth}`} icon={Users} tone="blue" />
+        <StatCard label="Total Employees" value={formatNumber(data.summary.total)} icon={Users} tone="indigo" onClick={() => navigate('/employees')} />
+        <StatCard label="Active" value={formatNumber(data.summary.active)} icon={Users} tone="green" onClick={() => navigate('/employees?status=ACTIVE')} />
+        <StatCard label="On Notice / Probation" value={formatNumber(data.summary.noticePeriod + data.summary.probation)} icon={Users} tone="amber" onClick={() => navigate('/employees?status=PROBATION')} />
+        <StatCard label="Joined / Exited This Month" value={`${data.summary.joinedThisMonth} / ${data.summary.exitedThisMonth}`} icon={Users} tone="blue" onClick={() => navigate('/employees')} />
       </div>
 
       <div className="card mt-6 p-5">
@@ -146,6 +157,7 @@ function EmployeeReport({ department, setDepartment }) {
 /* ------------------------------------------------------------------ */
 
 function AttendanceReport({ department, setDepartment }) {
+  const navigate = useNavigate();
   const [range, setRange] = useState({ startDate: currentYearStart, endDate: today });
   const query = useQuery({
     queryKey: ['reports', 'attendance', department, range],
@@ -171,15 +183,15 @@ function AttendanceReport({ department, setDepartment }) {
         ], data.perEmployee)}
       />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Present" value={formatNumber(data.summary.present)} icon={Clock} tone="green" />
-        <StatCard label="Absent" value={formatNumber(data.summary.absent)} icon={Clock} tone="red" />
-        <StatCard label="Late" value={formatNumber(data.summary.late)} icon={Clock} tone="amber" />
-        <StatCard label="On Leave" value={formatNumber(data.summary.onLeave)} icon={Clock} tone="blue" />
+        <StatCard label="Present" value={formatNumber(data.summary.present)} icon={Clock} tone="green" onClick={() => navigate('/attendance?tab=history&status=PRESENT')} />
+        <StatCard label="Absent" value={formatNumber(data.summary.absent)} icon={Clock} tone="red" onClick={() => navigate('/attendance?tab=history&status=ABSENT')} />
+        <StatCard label="Late" value={formatNumber(data.summary.late)} icon={Clock} tone="amber" onClick={() => navigate('/attendance?tab=history&status=LATE')} />
+        <StatCard label="On Leave" value={formatNumber(data.summary.onLeave)} icon={Clock} tone="blue" onClick={() => navigate('/leave?tab=requests')} />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
-        <StatCard label="Half Day" value={formatNumber(data.summary.halfDay)} icon={Clock} tone="purple" />
-        <StatCard label="Work From Home" value={formatNumber(data.summary.workFromHome)} icon={Clock} tone="indigo" />
-        <StatCard label="Total Work Hours" value={`${data.summary.totalWorkHours}h`} icon={Clock} tone="gray" />
+        <StatCard label="Half Day" value={formatNumber(data.summary.halfDay)} icon={Clock} tone="purple" onClick={() => navigate('/attendance?tab=history&status=HALF_DAY')} />
+        <StatCard label="Work From Home" value={formatNumber(data.summary.workFromHome)} icon={Clock} tone="indigo" onClick={() => navigate('/attendance?tab=history&status=WORK_FROM_HOME')} />
+        <StatCard label="Total Work Hours" value={`${data.summary.totalWorkHours}h`} icon={Clock} tone="gray" onClick={() => navigate('/attendance?tab=history')} />
       </div>
 
       <div className="mt-6">
@@ -204,6 +216,7 @@ function AttendanceReport({ department, setDepartment }) {
 /* ------------------------------------------------------------------ */
 
 function LeaveReport({ department, setDepartment }) {
+  const navigate = useNavigate();
   const [range, setRange] = useState({ startDate: currentYearStart, endDate: today });
   const query = useQuery({
     queryKey: ['reports', 'leave', department, range],
@@ -219,10 +232,10 @@ function LeaveReport({ department, setDepartment }) {
     <div>
       <ReportToolbar department={department} setDepartment={setDepartment} extra={<DateRange range={range} setRange={setRange} />} />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Pending" value={formatNumber(data.summary.pending)} icon={CalendarDays} tone="amber" />
-        <StatCard label="Approved" value={formatNumber(data.summary.approved)} icon={CalendarDays} tone="green" hint={`${data.summary.approvedDays} day(s)`} />
-        <StatCard label="Rejected" value={formatNumber(data.summary.rejected)} icon={CalendarDays} tone="red" />
-        <StatCard label="Cancelled" value={formatNumber(data.summary.cancelled)} icon={CalendarDays} tone="gray" />
+        <StatCard label="Pending" value={formatNumber(data.summary.pending)} icon={CalendarDays} tone="amber" onClick={() => navigate('/leave?tab=requests&status=PENDING')} />
+        <StatCard label="Approved" value={formatNumber(data.summary.approved)} icon={CalendarDays} tone="green" hint={`${data.summary.approvedDays} day(s)`} onClick={() => navigate('/leave?tab=requests&status=APPROVED')} />
+        <StatCard label="Rejected" value={formatNumber(data.summary.rejected)} icon={CalendarDays} tone="red" onClick={() => navigate('/leave?tab=requests&status=REJECTED')} />
+        <StatCard label="Cancelled" value={formatNumber(data.summary.cancelled)} icon={CalendarDays} tone="gray" onClick={() => navigate('/leave?tab=requests&status=CANCELLED')} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -273,6 +286,7 @@ function LeaveReport({ department, setDepartment }) {
 /* ------------------------------------------------------------------ */
 
 function PayrollReport({ department, setDepartment }) {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState({ month: String(now.getMonth() + 1), year: String(now.getFullYear()) });
   const query = useQuery({
     queryKey: ['reports', 'payroll', department, period],
@@ -308,10 +322,10 @@ function PayrollReport({ department, setDepartment }) {
         ], data.payslips)}
       />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Gross Payroll" value={formatCurrency(data.summary.grossPayroll, { compact: true })} icon={Wallet} tone="indigo" />
-        <StatCard label="Total Deductions" value={formatCurrency(data.summary.totalDeductions, { compact: true })} icon={Wallet} tone="red" />
-        <StatCard label="Net Payroll" value={formatCurrency(data.summary.netPayroll, { compact: true })} icon={Wallet} tone="green" />
-        <StatCard label="Payslips" value={formatNumber(data.summary.payslips)} icon={Users} tone="blue" hint={`Avg. ${formatCurrency(data.summary.averageNet, { compact: true })}`} />
+        <StatCard label="Gross Payroll" value={formatCurrency(data.summary.grossPayroll, { compact: true })} icon={Wallet} tone="indigo" onClick={() => navigate('/payroll?tab=payslips')} />
+        <StatCard label="Total Deductions" value={formatCurrency(data.summary.totalDeductions, { compact: true })} icon={Wallet} tone="red" onClick={() => navigate('/payroll?tab=payslips')} />
+        <StatCard label="Net Payroll" value={formatCurrency(data.summary.netPayroll, { compact: true })} icon={Wallet} tone="green" onClick={() => navigate('/payroll?tab=payslips')} />
+        <StatCard label="Payslips" value={formatNumber(data.summary.payslips)} icon={Users} tone="blue" hint={`Avg. ${formatCurrency(data.summary.averageNet, { compact: true })}`} onClick={() => navigate('/payroll?tab=payslips')} />
       </div>
 
       <div className="card mt-6 p-5">
@@ -348,6 +362,7 @@ function PayrollReport({ department, setDepartment }) {
 /* ------------------------------------------------------------------ */
 
 function AssetReport() {
+  const navigate = useNavigate();
   const query = useQuery({ queryKey: ['reports', 'assets'], queryFn: () => reportAPI.assets() });
   const data = query.data?.data?.data;
 
@@ -358,11 +373,11 @@ function AssetReport() {
   return (
     <div>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <StatCard label="Total Assets" value={formatNumber(data.summary.total)} icon={Package} tone="indigo" hint={formatCurrency(data.summary.totalValue, { compact: true })} />
-        <StatCard label="Assigned" value={formatNumber(data.summary.assigned)} icon={Package} tone="blue" />
-        <StatCard label="Available" value={formatNumber(data.summary.available)} icon={Package} tone="green" />
-        <StatCard label="Maintenance" value={formatNumber(data.summary.maintenance)} icon={Package} tone="amber" />
-        <StatCard label="Retired" value={formatNumber(data.summary.retired)} icon={Package} tone="red" hint={`${data.summary.returned} returned`} />
+        <StatCard label="Total Assets" value={formatNumber(data.summary.total)} icon={Package} tone="indigo" hint={formatCurrency(data.summary.totalValue, { compact: true })} onClick={() => navigate('/assets')} />
+        <StatCard label="Assigned" value={formatNumber(data.summary.assigned)} icon={Package} tone="blue" onClick={() => navigate('/assets?status=ASSIGNED')} />
+        <StatCard label="Available" value={formatNumber(data.summary.available)} icon={Package} tone="green" onClick={() => navigate('/assets?status=AVAILABLE')} />
+        <StatCard label="Maintenance" value={formatNumber(data.summary.maintenance)} icon={Package} tone="amber" onClick={() => navigate('/assets?status=MAINTENANCE')} />
+        <StatCard label="Retired" value={formatNumber(data.summary.retired)} icon={Package} tone="red" hint={`${data.summary.returned} returned`} onClick={() => navigate('/assets?status=RETIRED')} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -411,6 +426,7 @@ function AssetReport() {
 /* ------------------------------------------------------------------ */
 
 function LifecycleReport({ department, setDepartment }) {
+  const navigate = useNavigate();
   const query = useQuery({ queryKey: ['reports', 'lifecycle', department], queryFn: () => reportAPI.lifecycle({ department }) });
   const data = query.data?.data?.data;
 
@@ -418,8 +434,12 @@ function LifecycleReport({ department, setDepartment }) {
   if (query.error) return <div className="card"><ErrorState error={query.error} onRetry={query.refetch} /></div>;
   if (!data) return null;
 
-  const Section = ({ title, icon: Icon, block }) => (
-    <div className="card p-5">
+  const Section = ({ title, icon: Icon, block, to }) => (
+    <button
+      type="button"
+      onClick={() => navigate(to)}
+      className="card w-full p-5 text-left transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-primary-300/70 hover:shadow-lg active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"
+    >
       <div className="mb-4 flex items-center gap-2"><Icon className="h-4 w-4 text-gray-400" /><h2 className="section-title">{title}</h2></div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MiniStat label="Employees" value={block.employees} />
@@ -438,15 +458,15 @@ function LifecycleReport({ department, setDepartment }) {
           ))}
         </div>
       )}
-    </div>
+    </button>
   );
 
   return (
     <div>
       <ReportToolbar department={department} setDepartment={setDepartment} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Section title="Onboarding" icon={UserPlus} block={data.onboarding} />
-        <Section title="Offboarding" icon={UserMinus} block={data.offboarding} />
+        <Section title="Onboarding" icon={UserPlus} block={data.onboarding} to="/onboarding" />
+        <Section title="Offboarding" icon={UserMinus} block={data.offboarding} to="/offboarding" />
       </div>
     </div>
   );
