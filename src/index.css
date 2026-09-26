@@ -1075,37 +1075,45 @@
 }
 
 /* Tight halo directly behind the logo wrapper in Login.jsx (a sibling,
-   never touching AnimatedLogo itself) — a soft colored glow plus a crisp
-   thin rotating ring, the "glass halo" / "light refraction" cue that
-   keeps the logo reading as the brightest, most special point on the
-   page even against a bright background. */
+   never touching AnimatedLogo itself) — a premium adaptive glass badge
+   that hugs the logo's real rendered footprint instead of a fixed
+   oversized ellipse. --logo-w/--logo-h are written onto this element
+   directly (see the ResizeObserver effect in Login.jsx) from the actual
+   width/height of the AnimatedLogo wrapper, so the badge always sizes
+   itself to the logo — 28px of even padding on every side, baked into
+   the calc() below — and stays in sync across screen sizes and if the
+   logo's own dimensions ever change. The fallback values (220px/64px)
+   only matter for the first paint before the effect's first measurement
+   lands, and are never visible for more than a frame. */
 .auth-logo-halo {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 360px;
-  height: 220px;
+  width: calc(var(--logo-w, 220px) + 56px);
+  height: calc(var(--logo-h, 64px) + 56px);
   z-index: 0;
   transform: translate(-50%, -50%);
-  background: radial-gradient(50% 60% at 50% 50%, rgba(99, 102, 241, 0.22), rgba(56, 189, 248, 0.14) 55%, transparent 78%);
-  filter: blur(18px);
+  /* Slightly asymmetric corner radii — an organic "badge" silhouette,
+     never a perfect circle or a plain ellipse. */
+  border-radius: 44% 40% 46% 42% / 48% 44% 42% 46%;
+  background:
+    radial-gradient(60% 65% at 32% 26%, rgba(255, 255, 255, 0.6), transparent 62%),
+    linear-gradient(135deg, rgba(240, 247, 255, 0.55) 0%, rgba(219, 234, 254, 0.32) 48%, rgba(199, 210, 254, 0.2) 100%);
+  backdrop-filter: blur(8px) saturate(150%);
+  -webkit-backdrop-filter: blur(8px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+    0 0 30px 4px rgba(56, 189, 248, 0.16),
+    0 20px 40px -24px rgba(79, 70, 229, 0.3);
+  /* A few px of self-blur feathers the badge's own edge so it dissolves
+     into the background rather than cutting off hard, on top of the
+     already-soft box-shadow. */
+  filter: blur(3px);
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   animation: auth-halo-breathe 6s ease-in-out infinite;
   pointer-events: none;
-}
-
-.auth-logo-halo-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 250px;
-  height: 250px;
-  z-index: 0;
-  transform: translate(-50%, -50%) rotateX(60deg) rotate(0deg);
-  border-radius: 9999px;
-  border: 1px solid rgba(99, 102, 241, 0.22);
-  box-shadow: 0 0 24px rgba(56, 189, 248, 0.15);
-  animation: auth-halo-ring-spin 20s linear infinite;
-  pointer-events: none;
+  will-change: transform, opacity;
 }
 
 @keyframes auth-halo-breathe {
@@ -1118,17 +1126,7 @@
 
   50% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1.1);
-  }
-}
-
-@keyframes auth-halo-ring-spin {
-  0% {
-    transform: translate(-50%, -50%) rotateX(60deg) rotate(0deg);
-  }
-
-  100% {
-    transform: translate(-50%, -50%) rotateX(60deg) rotate(360deg);
+    transform: translate(-50%, -50%) scale(1.06);
   }
 }
 
@@ -1405,7 +1403,6 @@
   .auth-wave,
   .auth-blueprint,
   .auth-logo-halo,
-  .auth-logo-halo-ring,
   .auth-reflection,
   .auth-btn,
   .auth-btn::after,

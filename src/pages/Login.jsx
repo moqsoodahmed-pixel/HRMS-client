@@ -112,6 +112,8 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const sceneRef = useRef(null);
+  const logoBoxRef = useRef(null);
+  const logoHaloRef = useRef(null);
   const reducedMotion = useMemo(prefersReducedMotion, []);
 
   // Subtle pointer-driven depth: a small tilt on the card and independent
@@ -151,6 +153,37 @@ export default function Login() {
       if (raf) cancelAnimationFrame(raf);
     };
   }, [reducedMotion]);
+
+  // Size the logo's glass glow to the logo itself: measure the actual
+  // rendered box of the AnimatedLogo wrapper (which always matches the
+  // real image dimensions at the current height, per .dl-logo__sizer) and
+  // write it straight onto the halo element as CSS custom properties, so
+  // .auth-logo-halo's width/height (index.css) can be a calc() off the
+  // logo's real size plus fixed padding — no React state, no re-render,
+  // just a direct style write, same technique as the pointer-tilt effect
+  // above. Re-measures on any layout change (viewport resize, the logo
+  // image finishing load, a text-zoom, etc.) via ResizeObserver so the
+  // glow never drifts out of sync with the logo across screen sizes.
+  useEffect(() => {
+    const box = logoBoxRef.current;
+    const halo = logoHaloRef.current;
+    if (!box || !halo) return undefined;
+    const apply = () => {
+      const { width, height } = box.getBoundingClientRect();
+      if (width > 0 && height > 0) {
+        halo.style.setProperty('--logo-w', `${width.toFixed(1)}px`);
+        halo.style.setProperty('--logo-h', `${height.toFixed(1)}px`);
+      }
+    };
+    apply();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', apply);
+      return () => window.removeEventListener('resize', apply);
+    }
+    const ro = new ResizeObserver(apply);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -336,10 +369,13 @@ export default function Login() {
           {/* No card, no box, no plate — the mark floats directly on the
               scene, exactly as asked. The halo is a sibling behind it
               (lower in the stacking order), never touching AnimatedLogo
-              itself, so the logo now reads as lit from behind. */}
-          <div className="auth-logo-halo" aria-hidden="true" />
-          {!reducedMotion && <div className="auth-logo-halo-ring" aria-hidden="true" />}
-          <div className="relative mb-4">
+              itself, so the logo now reads as lit from behind. Its size is
+              driven entirely by --logo-w/--logo-h (set from logoBoxRef's
+              real rendered box in the effect above), so the glass badge
+              always hugs the actual logo footprint instead of a fixed
+              oversized ellipse. */}
+          <div ref={logoHaloRef} className="auth-logo-halo" aria-hidden="true" />
+          <div ref={logoBoxRef} className="relative mb-4 inline-flex">
             <AnimatedLogo className="h-16" />
           </div>
           <p className="relative flex items-center gap-1.5 text-sm font-medium tracking-wide text-indigo-900/80">
