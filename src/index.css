@@ -92,7 +92,11 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --dl-cycle: 8s;
+  /* A little brisker than the original 8s — every dl-seg-, dl-spark-beats
+     and dl-shatter-piece keyframe below is written in percentages of this
+     one duration, so speeding up the whole assembly sequence (and keeping
+     every beat perfectly in sync) only ever needs this one number changed. */
+  --dl-cycle: 6s;
 }
 
 .dl-logo {
@@ -103,6 +107,11 @@
 .dl-logo__stage {
   position: relative;
   display: inline-flex;
+  /* Tells the browser this subtree's layout/paint never affects, or is
+     affected by, anything outside it, so a weak/software-rendering device
+     doesn't have to re-walk the rest of the page on every animation frame
+     here — a free win with zero visual change. */
+  contain: layout paint;
 }
 
 /* Every segment shares this box: same size as the full logo, image
@@ -170,22 +179,15 @@
   animation-name: dl-seg-icon;
 }
 
-/* Ambient glow that breathes gently through the whole cycle, brightest
-   while the mark is fully assembled and held. */
-.dl-logo__stage::before {
-  content: '';
-  position: absolute;
-  inset: -30%;
-  z-index: 0;
-  border-radius: 30%;
-  background: radial-gradient(circle, rgba(79, 70, 229, 0.32) 0%, rgba(56, 189, 248, 0.16) 45%, transparent 72%);
-  filter: blur(12px);
-  pointer-events: none;
-}
-
-.dl-logo--loop .dl-logo__stage::before {
-  animation: dl-logo-hold-glow var(--dl-cycle) ease-in-out infinite;
-}
+/* AnimatedLogo previously drew its own small ambient glow here
+   (.dl-logo__stage::before, a blurred rounded-rect box tight around the
+   logo's own bounding box) on every instance — including the compact h-8
+   sidebar icon on every single page, where it read as an unwanted "tiny
+   box glow" behind the mark, and redundantly on the login page on top of
+   the page's own purpose-built .auth-glow-wash/.auth-logo-halo lighting.
+   Removed outright (rather than just hidden) since AnimatedLogo is the
+   one shared component every page's logo renders through — this is the
+   single fix that clears it everywhere at once. */
 
 /* ── Pre-assembly "converging fragment" sparks ─────────────────────────
    A small field of tiny glass points that flicker in right as each
@@ -215,27 +217,6 @@
   pointer-events: none;
   opacity: 0;
   animation: dl-shatter-piece var(--dl-cycle) cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-
-@keyframes dl-logo-hold-glow {
-
-  0%,
-  55% {
-    opacity: 0.35;
-    transform: scale(1);
-  }
-
-  70%,
-  83% {
-    opacity: 0.9;
-    transform: scale(1.08);
-  }
-
-  90%,
-  100% {
-    opacity: 0.2;
-    transform: scale(0.94);
-  }
 }
 
 @keyframes dl-spark-beats {
@@ -285,6 +266,11 @@
 
 @keyframes dl-shatter-piece {
 
+  /* Blur radii kept small (was up to 3px) — animated blur is the single
+     most expensive thing a weak/non-GPU device can be asked to redraw
+     every frame, and with ~18 of these firing at once, trimming it here
+     is what actually keeps the burst smooth on low-power hardware. The
+     motion (translate/rotate/scale/opacity) carries the effect either way. */
   0%,
   82% {
     opacity: 0;
@@ -295,13 +281,13 @@
   86% {
     opacity: 1;
     transform: translate3d(calc(var(--dx) * 0.4), calc(var(--dy) * 0.4), 0) rotate(calc(var(--rot) * 0.5)) scale(1);
-    filter: blur(0.5px);
+    filter: blur(0.3px);
   }
 
   93% {
     opacity: 0;
     transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(0.7);
-    filter: blur(3px);
+    filter: blur(1.25px);
   }
 
   100% {
@@ -315,12 +301,17 @@
    per segment (that's what staggers D, then "uty", then L, then
    "aunch", then the shield) but 0% and 100% are always fully invisible,
    so the loop restarts with no visible seam. */
+/* Blur radii here were cut roughly in half from the original (6-7px down to
+   3-3.5px, the mid-flight 1px step down to 0.6px) — these 5 crops are each
+   the full logo's size, so an animated blur on them is the costliest part
+   of the whole sequence per frame; the translate/rotate/scale carries the
+   "flying into place" read regardless of exactly how soft the blur gets. */
 @keyframes dl-seg-d {
 
   0%,
   3% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(3px);
     transform: translate3d(-34px, -30px, 0) rotate(-16deg) scale(0.7);
   }
 
@@ -338,14 +329,14 @@
 
   87% {
     opacity: 0.9;
-    filter: blur(1px);
+    filter: blur(0.6px);
     transform: translate3d(-26px, -34px, 0) rotate(-18deg) scale(0.85);
   }
 
   94%,
   100% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(3px);
     transform: translate3d(-52px, -58px, 0) rotate(-26deg) scale(0.6);
   }
 }
@@ -355,7 +346,7 @@
   0%,
   14% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(3px);
     transform: translate3d(-42px, 8px, 0) scale(0.75);
   }
 
@@ -373,14 +364,14 @@
 
   87% {
     opacity: 0.9;
-    filter: blur(1px);
+    filter: blur(0.6px);
     transform: translate3d(18px, -26px, 0) rotate(10deg) scale(0.85);
   }
 
   94%,
   100% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(3px);
     transform: translate3d(36px, -48px, 0) rotate(16deg) scale(0.6);
   }
 }
@@ -390,7 +381,7 @@
   0%,
   25% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(3px);
     transform: translate3d(0, 36px, 0) rotate(10deg) scale(0.7);
   }
 
@@ -408,14 +399,14 @@
 
   87% {
     opacity: 0.9;
-    filter: blur(1px);
+    filter: blur(0.6px);
     transform: translate3d(-20px, 30px, 0) rotate(-12deg) scale(0.85);
   }
 
   94%,
   100% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(3px);
     transform: translate3d(-40px, 56px, 0) rotate(-20deg) scale(0.6);
   }
 }
@@ -425,7 +416,7 @@
   0%,
   36% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(3px);
     transform: translate3d(48px, -10px, 0) scale(0.75);
   }
 
@@ -443,14 +434,14 @@
 
   87% {
     opacity: 0.9;
-    filter: blur(1px);
+    filter: blur(0.6px);
     transform: translate3d(30px, 28px, 0) rotate(8deg) scale(0.85);
   }
 
   94%,
   100% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(3px);
     transform: translate3d(58px, 52px, 0) rotate(14deg) scale(0.6);
   }
 }
@@ -460,7 +451,7 @@
   0%,
   49% {
     opacity: 0;
-    filter: blur(7px);
+    filter: blur(3.5px);
     transform: translate3d(-20px, 26px, 0) rotate(-20deg) scale(0.6);
   }
 
@@ -478,14 +469,14 @@
 
   87% {
     opacity: 0.9;
-    filter: blur(1px);
+    filter: blur(0.6px);
     transform: translate3d(-30px, -18px, 0) rotate(-14deg) scale(0.85);
   }
 
   94%,
   100% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(3.5px);
     transform: translate3d(-58px, -34px, 0) rotate(-22deg) scale(0.6);
   }
 }
@@ -499,8 +490,7 @@
    the same image drawn 5 times. */
 .dl-logo--static .dl-logo__seg,
 .dl-logo--static .dl-logo__spark,
-.dl-logo--static .dl-logo__shard,
-.dl-logo--static .dl-logo__stage::before {
+.dl-logo--static .dl-logo__shard {
   display: none;
 }
 
@@ -545,10 +535,6 @@
   .dl-logo__shard {
     animation: none !important;
     opacity: 0 !important;
-  }
-
-  .dl-logo__stage::before {
-    animation: none !important;
   }
 }
 

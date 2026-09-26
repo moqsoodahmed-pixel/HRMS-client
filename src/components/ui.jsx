@@ -45,9 +45,14 @@ const SPARK_POSITIONS = [
 
 // Fixed burst vectors for the shatter fragments — each one a plain
 // {dx, dy, rot} triple consumed as CSS custom properties by the single
-// shared dl-shatter-piece keyframe, so ~40 shards animate without 40
-// separate keyframe definitions.
-const SHARD_COUNT = 40;
+// shared dl-shatter-piece keyframe, so these shards animate without a
+// separate keyframe definition per shard. Was 40 — cut to 18 (plus the
+// blur trim on dl-shatter-piece/dl-seg-* in index.css) specifically so the
+// burst stays smooth on weak/non-GPU/software-rendering devices, which
+// were visibly dropping frames trying to animate 40 of these at once
+// alongside the 5 segment crops; the burst still reads as "shatters into
+// many fragments" at this count.
+const SHARD_COUNT = 18;
 const SHARDS = Array.from({ length: SHARD_COUNT }, (_, i) => {
   const angle = (i / SHARD_COUNT) * Math.PI * 2 + (i % 3);
   const dist = 46 + ((i * 37) % 60);
