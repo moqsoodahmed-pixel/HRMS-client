@@ -92,11 +92,12 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* A little brisker than the original 8s — every dl-seg-, dl-spark-beats
-     and dl-shatter-piece keyframe below is written in percentages of this
-     one duration, so speeding up the whole assembly sequence (and keeping
-     every beat perfectly in sync) only ever needs this one number changed. */
-  --dl-cycle: 6s;
+  /* Went 8s -> 6s -> 4.5s: still noticeably snappier each time, and every
+     dl-seg-, dl-spark-beats and dl-shatter-piece keyframe below is written
+     in percentages of this one duration, so the whole assembly sequence
+     speeds up (with every beat still perfectly in sync) from this one
+     number alone — no keyframe percentages need touching. */
+  --dl-cycle: 4.5s;
 }
 
 .dl-logo {
@@ -281,13 +282,13 @@
   86% {
     opacity: 1;
     transform: translate3d(calc(var(--dx) * 0.4), calc(var(--dy) * 0.4), 0) rotate(calc(var(--rot) * 0.5)) scale(1);
-    filter: blur(0.3px);
+    filter: blur(0.15px);
   }
 
   93% {
     opacity: 0;
     transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(0.7);
-    filter: blur(1.25px);
+    filter: blur(0.3px);
   }
 
   100% {
@@ -311,7 +312,7 @@
   0%,
   3% {
     opacity: 0;
-    filter: blur(3px);
+    filter: blur(1.5px);
     transform: translate3d(-34px, -30px, 0) rotate(-16deg) scale(0.7);
   }
 
@@ -329,14 +330,14 @@
 
   87% {
     opacity: 0.9;
-    filter: blur(0.6px);
+    filter: blur(0.3px);
     transform: translate3d(-26px, -34px, 0) rotate(-18deg) scale(0.85);
   }
 
   94%,
   100% {
     opacity: 0;
-    filter: blur(3px);
+    filter: blur(1.5px);
     transform: translate3d(-52px, -58px, 0) rotate(-26deg) scale(0.6);
   }
 }
@@ -346,7 +347,7 @@
   0%,
   14% {
     opacity: 0;
-    filter: blur(3px);
+    filter: blur(1.5px);
     transform: translate3d(-42px, 8px, 0) scale(0.75);
   }
 
@@ -364,14 +365,14 @@
 
   87% {
     opacity: 0.9;
-    filter: blur(0.6px);
+    filter: blur(0.3px);
     transform: translate3d(18px, -26px, 0) rotate(10deg) scale(0.85);
   }
 
   94%,
   100% {
     opacity: 0;
-    filter: blur(3px);
+    filter: blur(1.5px);
     transform: translate3d(36px, -48px, 0) rotate(16deg) scale(0.6);
   }
 }
@@ -381,7 +382,7 @@
   0%,
   25% {
     opacity: 0;
-    filter: blur(3px);
+    filter: blur(1.5px);
     transform: translate3d(0, 36px, 0) rotate(10deg) scale(0.7);
   }
 
@@ -399,14 +400,14 @@
 
   87% {
     opacity: 0.9;
-    filter: blur(0.6px);
+    filter: blur(0.3px);
     transform: translate3d(-20px, 30px, 0) rotate(-12deg) scale(0.85);
   }
 
   94%,
   100% {
     opacity: 0;
-    filter: blur(3px);
+    filter: blur(1.5px);
     transform: translate3d(-40px, 56px, 0) rotate(-20deg) scale(0.6);
   }
 }
@@ -416,7 +417,7 @@
   0%,
   36% {
     opacity: 0;
-    filter: blur(3px);
+    filter: blur(1.5px);
     transform: translate3d(48px, -10px, 0) scale(0.75);
   }
 
@@ -434,14 +435,14 @@
 
   87% {
     opacity: 0.9;
-    filter: blur(0.6px);
+    filter: blur(0.3px);
     transform: translate3d(30px, 28px, 0) rotate(8deg) scale(0.85);
   }
 
   94%,
   100% {
     opacity: 0;
-    filter: blur(3px);
+    filter: blur(1.5px);
     transform: translate3d(58px, 52px, 0) rotate(14deg) scale(0.6);
   }
 }
@@ -451,7 +452,7 @@
   0%,
   49% {
     opacity: 0;
-    filter: blur(3.5px);
+    filter: blur(1.8px);
     transform: translate3d(-20px, 26px, 0) rotate(-20deg) scale(0.6);
   }
 
@@ -469,14 +470,14 @@
 
   87% {
     opacity: 0.9;
-    filter: blur(0.6px);
+    filter: blur(0.3px);
     transform: translate3d(-30px, -18px, 0) rotate(-14deg) scale(0.85);
   }
 
   94%,
   100% {
     opacity: 0;
-    filter: blur(3.5px);
+    filter: blur(1.8px);
     transform: translate3d(-58px, -34px, 0) rotate(-22deg) scale(0.6);
   }
 }
