@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Mail, Lock, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../api/axios';
-import { Modal, FormField } from '../components/ui';
+import { Modal, FormField, AnimatedLogo } from '../components/ui';
 import { errorMessage } from '../lib/format';
 import { getCurrentLocation } from '../lib/geolocation';
 
@@ -48,25 +48,40 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-primary-600 p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex items-center justify-center rounded-2xl bg-white px-6 py-3">
-            <img
-              src="/dutylaunch-logo.webp"
-              alt="DutyLaunch"
-              className="h-10 w-auto object-contain"
-            />
+    <div className="auth-scene flex min-h-screen items-center justify-center p-4">
+      {/* Layered depth background — mesh gradient, soft light rays and a
+          couple of slow-floating blurred orbs. Pure CSS, transform/opacity
+          only, so it costs nothing on low-end devices and respects
+          prefers-reduced-motion (see index.css). */}
+      <div className="auth-scene__mesh" aria-hidden="true" />
+      <div className="auth-scene__rays" aria-hidden="true" />
+      <div
+        className="auth-orb h-72 w-72 bg-indigo-500/30"
+        style={{ top: '8%', left: '8%', animation: 'dl-orb-float-a 12s ease-in-out infinite' }}
+        aria-hidden="true"
+      />
+      <div
+        className="auth-orb h-96 w-96 bg-cyan-400/20"
+        style={{ bottom: '4%', right: '6%', animation: 'dl-orb-float-b 15s ease-in-out infinite' }}
+        aria-hidden="true"
+      />
+
+      <div className="dl-stagger relative z-10 w-full max-w-md">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <div className="mb-5 flex items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-7 py-4 backdrop-blur-sm">
+            <AnimatedLogo className="h-11" />
           </div>
-          <p className="text-primary-200">HRMS Portal</p>
+          <p className="flex items-center gap-1.5 text-sm font-medium tracking-wide text-indigo-200/90">
+            <ShieldCheck className="h-4 w-4 text-cyan-300" /> HRMS Portal
+          </p>
         </div>
 
-        <div className="card p-6">
-          <h2 className="text-xl font-bold text-gray-900">Sign in</h2>
-          <p className="mb-6 mt-1 text-sm text-gray-500">Enter your credentials to access the portal</p>
+        <div className="auth-card rounded-2xl p-7">
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900">Sign in</h2>
+          <p className="mb-6 mt-1.5 text-sm text-gray-500">Enter your credentials to access the portal</p>
 
           {error && (
-            <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
+            <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50/90 p-3">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-600" />
               <p className="text-sm text-red-700">{error}</p>
             </div>
@@ -74,21 +89,25 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <FormField label="Email address" required>
-              <input
-                type="email"
-                className="input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="username"
-                required
-              />
+              <div className="auth-input-wrap">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="email"
+                  className="auth-input pl-10"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="username"
+                  required
+                />
+              </div>
             </FormField>
 
             <FormField label="Password" required>
-              <div className="relative">
+              <div className="auth-input-wrap">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  className="input pr-10"
+                  className="auth-input pl-10 pr-10"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
@@ -97,7 +116,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -110,18 +129,18 @@ export default function Login() {
                 <input type="checkbox" className="rounded border-gray-300" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
                 Remember me
               </label>
-              <button type="button" onClick={() => setForgotOpen(true)} className="text-sm text-primary-600 hover:underline">
+              <button type="button" onClick={() => setForgotOpen(true)} className="text-sm font-medium text-primary-600 hover:underline">
                 Forgot password?
               </button>
             </div>
 
-            <button type="submit" disabled={submitting} className="btn-primary w-full justify-center disabled:opacity-60">
+            <button type="submit" disabled={submitting} className="auth-btn flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
               {submitting ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
         </div>
 
-        <p className="mt-6 text-center text-xs text-primary-200">
+        <p className="mt-6 text-center text-xs text-indigo-200/70">
           &copy; {new Date().getFullYear()} DutyLaunch Solutions Private Limited
         </p>
       </div>

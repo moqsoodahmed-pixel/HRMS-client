@@ -8,6 +8,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
   body {
     @apply bg-gray-50 text-gray-900;
   }
@@ -22,55 +23,28 @@
 
   /* ── Buttons ────────────────────────────────────────────────────────── */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg
-           bg-primary-600 px-4 py-2 text-sm font-medium text-white
-           shadow-sm transition-colors
-           hover:bg-primary-700
-           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
-           disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg
-           border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700
-           shadow-sm transition-colors
-           hover:bg-gray-50
-           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
-           disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg
-           bg-red-600 px-4 py-2 text-sm font-medium text-white
-           shadow-sm transition-colors
-           hover:bg-red-700
-           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2
-           disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-lg p-2
-           text-gray-500 transition-colors
-           hover:bg-gray-100 hover:text-gray-700
-           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1
-           disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   /* ── Form inputs ────────────────────────────────────────────────────── */
   .input {
-    @apply block w-full rounded-lg border border-gray-300 bg-white
-           px-3 py-2 text-sm text-gray-900 shadow-sm
-           placeholder:text-gray-400
-           focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500
-           disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500;
+    @apply block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500;
   }
 
   .form-input {
-    @apply block w-full rounded-lg border border-gray-200 bg-white
-           px-3 py-2 text-sm text-gray-900
-           placeholder:text-gray-400
-           focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400
-           disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500;
+    @apply block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500;
   }
 
   select.input,
@@ -94,5 +68,329 @@
 
   .page-subtitle {
     @apply text-sm text-gray-500;
+  }
+}
+
+/* ── Animated brand logo ───────────────────────────────────────────────
+   Wraps the ORIGINAL, unmodified logo image. Nothing here redraws or
+   distorts the mark — it only adds a masked light-sweep, a slow ambient
+   glow "breath", and a very small floating parallax, all GPU-accelerated
+   (transform/opacity only) so it's cheap to run everywhere the logo
+   appears (login, sidebar, and any future usage of <AnimatedLogo />). */
+.dl-logo {
+  position: relative;
+  display: inline-flex;
+  will-change: transform;
+  animation: dl-logo-float 6s ease-in-out infinite;
+  transform: translateZ(0);
+}
+
+.dl-logo img {
+  position: relative;
+  z-index: 1;
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.08));
+}
+
+.dl-logo::before {
+  /* Ambient blue "breathing" glow behind the mark */
+  content: '';
+  position: absolute;
+  inset: -35%;
+  z-index: 0;
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.35) 0%, rgba(56, 189, 248, 0.18) 45%, transparent 72%);
+  filter: blur(10px);
+  animation: dl-logo-glow 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.dl-logo::after {
+  /* Diagonal light sweep, masked to the exact silhouette of the logo
+     image itself — so the shine only ever appears inside the shield,
+     never as a rectangle or overlay artifact. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(115deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.75) 48%,
+      rgba(186, 230, 253, 0.55) 52%,
+      transparent 70%);
+  background-size: 250% 250%;
+  -webkit-mask-image: var(--dl-logo-mask);
+  mask-image: var(--dl-logo-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  animation: dl-logo-sweep 5s ease-in-out infinite;
+  opacity: 0.9;
+}
+
+@keyframes dl-logo-float {
+
+  0%,
+  100% {
+    transform: translateY(0) translateZ(0);
+  }
+
+  50% {
+    transform: translateY(-3px) translateZ(0);
+  }
+}
+
+@keyframes dl-logo-glow {
+
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes dl-logo-sweep {
+  0% {
+    background-position: -60% -60%;
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 0.9;
+  }
+
+  45% {
+    background-position: 60% 60%;
+    opacity: 0.9;
+  }
+
+  60% {
+    opacity: 0;
+  }
+
+  100% {
+    background-position: 60% 60%;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .dl-logo,
+  .dl-logo::before,
+  .dl-logo::after {
+    animation: none !important;
+  }
+}
+
+/* ── Login experience: aurora / mesh background + glass depth ─────────── */
+.auth-scene {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #060a1a;
+  background: linear-gradient(160deg, #060a1a 0%, #0b1230 45%, #0e1a3d 100%);
+}
+
+.auth-scene__mesh {
+  position: absolute;
+  inset: -10%;
+  z-index: 0;
+  background:
+    radial-gradient(38% 42% at 18% 22%, rgba(56, 189, 248, 0.35), transparent 60%),
+    radial-gradient(42% 46% at 82% 18%, rgba(99, 102, 241, 0.35), transparent 62%),
+    radial-gradient(46% 50% at 50% 88%, rgba(45, 212, 191, 0.18), transparent 65%);
+  filter: blur(30px) saturate(120%);
+  animation: dl-mesh-drift 22s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.auth-scene__rays {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: repeating-linear-gradient(100deg,
+      rgba(255, 255, 255, 0.035) 0px,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px,
+      transparent 90px);
+  mix-blend-mode: screen;
+  opacity: 0.5;
+}
+
+.auth-orb {
+  position: absolute;
+  z-index: 0;
+  border-radius: 9999px;
+  filter: blur(2px);
+  will-change: transform;
+  pointer-events: none;
+}
+
+@keyframes dl-mesh-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  100% {
+    transform: translate3d(-2%, 2%, 0) scale(1.06);
+  }
+}
+
+@keyframes dl-orb-float-a {
+
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(18px, -26px, 0);
+  }
+}
+
+@keyframes dl-orb-float-b {
+
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(-22px, 20px, 0);
+  }
+}
+
+.auth-card {
+  position: relative;
+  z-index: 1;
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.82));
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    0 30px 80px -20px rgba(2, 6, 23, 0.55),
+    0 10px 30px -12px rgba(2, 6, 23, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.auth-input-wrap {
+  position: relative;
+}
+
+.auth-input {
+  width: 100%;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0.85rem 0.9rem;
+  font-size: 0.925rem;
+  color: #0f172a;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.auth-input:focus {
+  outline: none;
+  border-color: rgba(79, 70, 229, 0.65);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18), 0 4px 18px -4px rgba(79, 70, 229, 0.35);
+}
+
+.auth-btn {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.9rem;
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 55%, #1e3a8a 100%);
+  box-shadow: 0 12px 28px -10px rgba(67, 56, 202, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease, filter 180ms ease;
+}
+
+.auth-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 38px -12px rgba(67, 56, 202, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  filter: brightness(1.05);
+}
+
+.auth-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+}
+
+.auth-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.35) 50%, transparent 80%);
+  background-size: 250% 250%;
+  background-position: -60% -60%;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.auth-btn:hover:not(:disabled)::after {
+  opacity: 1;
+  animation: dl-logo-sweep 1.4s ease-in-out 1;
+}
+
+@keyframes dl-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dl-stagger>* {
+  opacity: 0;
+  animation: dl-rise-in 620ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.dl-stagger>*:nth-child(1) {
+  animation-delay: 40ms;
+}
+
+.dl-stagger>*:nth-child(2) {
+  animation-delay: 130ms;
+}
+
+.dl-stagger>*:nth-child(3) {
+  animation-delay: 220ms;
+}
+
+.dl-stagger>*:nth-child(4) {
+  animation-delay: 310ms;
+}
+
+.dl-stagger>*:nth-child(5) {
+  animation-delay: 390ms;
+}
+
+.dl-stagger>*:nth-child(6) {
+  animation-delay: 460ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .auth-scene__mesh,
+  .auth-orb,
+  .auth-btn::after {
+    animation: none !important;
+  }
+
+  .dl-stagger>* {
+    opacity: 1;
+    animation: none !important;
+    transform: none !important;
   }
 }

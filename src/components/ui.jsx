@@ -4,6 +4,31 @@ import { STATUS_TONES, ACCEPTED_FILE_TYPES, MAX_UPLOAD_BYTES } from '../constant
 import { humanise, formatFileSize } from '../lib/format';
 
 /* ------------------------------------------------------------------ */
+/* Animated brand logo                                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The one place the DutyLaunch logo file is referenced. Renders the
+ * ORIGINAL /dutylaunch-logo.webp completely unmodified — same pixels,
+ * same proportions, same colors — wrapped in a `.dl-logo` shell (see
+ * index.css) that adds a masked light-sweep, a slow ambient glow, and a
+ * few-pixel float, all via GPU-friendly transform/opacity keyframes.
+ * Every screen that shows the logo (login, sidebar, and anything added
+ * later) should render this instead of a raw <img>, so the animation —
+ * and any future logo update — only needs to happen in one spot.
+ */
+export function AnimatedLogo({ className = 'h-10', alt = 'DutyLaunch' }) {
+  return (
+    <span
+      className={`dl-logo ${className}`}
+      style={{ '--dl-logo-mask': 'url(/dutylaunch-logo.webp)' }}
+    >
+      <img src="/dutylaunch-logo.webp" alt={alt} className={`${className} w-auto object-contain`} />
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Page furniture                                                      */
 /* ------------------------------------------------------------------ */
 
