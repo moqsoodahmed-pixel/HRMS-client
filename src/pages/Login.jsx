@@ -8,25 +8,59 @@ import { Modal, FormField, AnimatedLogo } from '../components/ui';
 import { errorMessage } from '../lib/format';
 import { getCurrentLocation } from '../lib/geolocation';
 
-// Fixed (not re-randomized per render) so the ambient particle field
-// never causes a reflow or a visual "jump" on re-render — only generated
-// once, on module load.
-const PARTICLES = Array.from({ length: 18 }, (_, i) => ({
+// All of the following arrays are fixed (not re-randomized per render) so
+// none of these ambient layers ever causes a reflow or a visual "jump" on
+// re-render — every one is only generated once, on module load.
+
+// Layer 5 — volumetric particles: varied size/opacity/duration/delay, each
+// on a loose non-repeating drift path (see .auth-glow-particle's keyframe,
+// which reads --p1x/--p1y/--p2x/--p2y/--p3x/--p3y per-particle).
+const PARTICLES = Array.from({ length: 22 }, (_, i) => ({
   left: `${(i * 37 + 5) % 100}%`,
-  size: 2 + ((i * 7) % 3),
-  duration: 15 + ((i * 5) % 12),
-  delay: -(i * 1.3),
+  size: 1.5 + ((i * 7) % 4),
+  opacity: 0.45 + ((i * 11) % 45) / 100,
+  duration: 16 + ((i * 5) % 18),
+  delay: -(i * 1.7),
+  p1x: `${((i * 13) % 27) - 13}px`, p1y: `${-14 - ((i * 9) % 12)}px`,
+  p2x: `${((i * 19) % 33) - 16}px`, p2y: `${-30 - ((i * 7) % 16)}px`,
+  p3x: `${((i * 23) % 29) - 14}px`, p3y: `${-48 - ((i * 11) % 20)}px`,
 }));
 
-// Floating glass panels (diamonds/hexagons) — kept away from the scene's
-// center so they never cross behind the logo or the Sign In card, per the
-// "highlight, don't compete with" requirement.
-const PANELS = [
-  { top: '10%', left: '9%', size: 110, rotate: 14, shape: 'diamond', dx: '-14px', dy: '18px', depth: 0.5 },
-  { top: '72%', left: '6%', size: 150, rotate: -8, shape: 'hex', dx: '12px', dy: '-16px', depth: 0.35 },
-  { top: '16%', left: '86%', size: 90, rotate: 22, shape: 'hex', dx: '-10px', dy: '14px', depth: 0.6 },
-  { top: '78%', left: '88%', size: 130, rotate: -18, shape: 'diamond', dx: '16px', dy: '-12px', depth: 0.4 },
-  { top: '46%', left: '3%', size: 60, rotate: 6, shape: 'diamond', dx: '10px', dy: '10px', depth: 0.7 },
+// Layer 3 — diagonal light beams: each its own angle/peak opacity/speed/
+// delay so none of the sweeps ever move in lockstep.
+const BEAMS = [
+  { top: '8%', angle: -16, peak: 0.6, duration: 27, delay: 0 },
+  { top: '34%', angle: -22, peak: 0.45, duration: 42, delay: -14 },
+  { top: '58%', angle: -12, peak: 0.5, duration: 34, delay: -6 },
+  { top: '80%', angle: -20, peak: 0.4, duration: 55, delay: -30 },
+];
+
+// Layer 4 — floating 3D glass ribbons: kept off to the sides so they never
+// cross behind the logo or the Sign In card. Each carries its own rotation
+// range, drift distance, depth (translateZ) and duration so every ribbon
+// tumbles through 3D space differently.
+const RIBBONS = [
+  { top: '6%', left: '4%', w: 260, h: 120, rx0: 10, ry0: -14, rz0: 6, rx1: -16, ry1: 18, rz1: -8, dx: 22, dy: -26, tz: 60, opLo: 0.5, opHi: 0.85, duration: 38 },
+  { top: '68%', left: '2%', w: 220, h: 100, rx0: -8, ry0: 12, rz0: -4, rx1: 14, ry1: -10, rz1: 10, dx: -18, dy: 22, tz: 40, opLo: 0.45, opHi: 0.8, duration: 49 },
+  { top: '14%', left: '80%', w: 300, h: 140, rx0: 6, ry0: 16, rz0: -6, rx1: -12, ry1: -20, rz1: 8, dx: -24, dy: 20, tz: 70, opLo: 0.5, opHi: 0.85, duration: 61 },
+  { top: '74%', left: '84%', w: 210, h: 95, rx0: -12, ry0: -8, rz0: 5, rx1: 18, ry1: 14, rz1: -10, dx: 20, dy: -18, tz: 30, opLo: 0.4, opHi: 0.75, duration: 27 },
+  { top: '42%', left: '90%', w: 170, h: 80, rx0: 8, ry0: 10, rz0: -3, rx1: -10, ry1: -16, rz1: 6, dx: -16, dy: 24, tz: 50, opLo: 0.4, opHi: 0.7, duration: 34 },
+];
+
+// Layer 7 — enormous, barely-visible glass waves, each at a very different
+// vertical position/duration so they never appear to move as one.
+const WAVES = [
+  { top: '18%', duration: 68, delay: 0 },
+  { top: '52%', duration: 90, delay: -30 },
+  { top: '86%', duration: 55, delay: -18 },
+];
+
+// Layer 10 — ambient reflections: long, unsynchronized cycles so each one
+// appears, sweeps, fades, and only returns much later, independently of
+// the others.
+const REFLECTIONS = [
+  { duration: 46, delay: 0 },
+  { duration: 63, delay: -28 },
 ];
 
 /** True once, read synchronously so the very first render already knows
@@ -121,48 +155,97 @@ export default function Login() {
 
   return (
     <div ref={sceneRef} className="auth-scene flex min-h-screen items-center justify-center p-4">
-      {/* Enterprise cinematic stage background — a distant floor grid, two
-          slow aurora washes, a rotating volumetric light column + a tighter
-          spotlight anchored behind the logo, floating glass panels, a fine
-          particle field, one slow light sweep and a soft floor glow. Every
-          layer is transform/opacity animated (GPU-friendly, no layout
-          thrash) and z-index 0 — strictly behind the logo/card, which live
-          in the z-index 10 block below and are completely untouched. The
-          whole stack collapses to a still frame under
-          prefers-reduced-motion (see index.css). */}
-      <div className="auth-grid auth-parallax" style={{ '--depth': 0.3 }} aria-hidden="true" />
-      <div className="auth-aurora auth-aurora--a auth-parallax" style={{ '--depth': 0.5 }} aria-hidden="true" />
-      <div className="auth-aurora auth-aurora--b auth-parallax" style={{ '--depth': 0.6 }} aria-hidden="true" />
-      <div className="auth-godray" aria-hidden="true" />
-      <div className="auth-spotlight" aria-hidden="true" />
+      {/* Premium enterprise-technology background — ten independent depth
+          layers (base wash, aurora, diagonal beams, 3D glass ribbons,
+          volumetric particles, tinted fog, giant glass waves, a faint
+          blueprint grid, a logo spotlight and slow ambient reflections),
+          every one animated with transform/opacity/filter only
+          (GPU-composited) on its own unsynchronized duration. All z-index 0
+          — strictly behind the logo/card, which live in the z-index 10
+          block below and are completely untouched. The whole stack
+          collapses to a still frame under prefers-reduced-motion (see
+          index.css). */}
 
-      {PANELS.map((p, i) => (
+      {/* Layer 2 — aurora */}
+      <div className="auth-aurora auth-parallax" style={{ '--depth': 0.35 }} aria-hidden="true" />
+
+      {/* Layer 3 — diagonal light beams */}
+      {BEAMS.map((b, i) => (
         <div
           key={i}
-          className={`auth-panel auth-panel--${p.shape} auth-parallax`}
+          className="auth-beam"
           style={{
-            top: p.top, left: p.left, width: p.size, height: p.size,
-            '--r': `${p.rotate}deg`, '--dx': p.dx, '--dy': p.dy, '--depth': p.depth,
-            animationDelay: `${i * 1.4}s`, animationDuration: `${18 + i * 2}s`,
+            top: b.top, '--beam-angle': `${b.angle}deg`, '--beam-peak': b.peak,
+            animationDuration: `${b.duration}s`, animationDelay: `${b.delay}s`,
           }}
           aria-hidden="true"
         />
       ))}
 
+      {/* Layer 4 — floating 3D glass ribbons */}
+      {RIBBONS.map((r, i) => (
+        <div
+          key={i}
+          className="auth-glass-ribbon auth-parallax"
+          style={{
+            top: r.top, left: r.left, width: r.w, height: r.h,
+            '--rx0': `${r.rx0}deg`, '--ry0': `${r.ry0}deg`, '--rz0': `${r.rz0}deg`,
+            '--rx1': `${r.rx1}deg`, '--ry1': `${r.ry1}deg`, '--rz1': `${r.rz1}deg`,
+            '--dx': `${r.dx}px`, '--dy': `${r.dy}px`, '--tz': `${r.tz}px`,
+            '--ribbon-op-lo': r.opLo, '--ribbon-op-hi': r.opHi,
+            '--depth': 0.3 + i * 0.08,
+            animationDuration: `${r.duration}s`, animationDelay: `${-i * 5}s`,
+          }}
+          aria-hidden="true"
+        />
+      ))}
+
+      {/* Layer 5 — volumetric particles */}
       {!reducedMotion && PARTICLES.map((p, i) => (
         <span
           key={i}
-          className="auth-node"
+          className="auth-glow-particle"
           style={{
-            left: p.left, bottom: '-4%', width: p.size, height: p.size,
+            left: p.left, bottom: '-6%', width: p.size, height: p.size,
+            boxShadow: `0 0 ${p.size * 2}px ${p.size * 0.6}px rgba(147, 197, 253, 0.45)`,
+            '--p-op': p.opacity,
+            '--p1x': p.p1x, '--p1y': p.p1y, '--p2x': p.p2x, '--p2y': p.p2y, '--p3x': p.p3x, '--p3y': p.p3y,
             animationDuration: `${p.duration}s`, animationDelay: `${p.delay}s`,
           }}
           aria-hidden="true"
         />
       ))}
 
-      <div className="auth-sweep" aria-hidden="true" />
-      <div className="auth-floor-glow" aria-hidden="true" />
+      {/* Layer 6 — tinted depth fog (masked away from the logo/card column) */}
+      <div className="auth-fog auth-fog--near" aria-hidden="true" />
+      <div className="auth-fog auth-fog--far" aria-hidden="true" />
+
+      {/* Layer 7 — enormous barely-visible glass waves */}
+      {WAVES.map((w, i) => (
+        <div
+          key={i}
+          className="auth-wave"
+          style={{ top: w.top, animationDuration: `${w.duration}s`, animationDelay: `${w.delay}s` }}
+          aria-hidden="true"
+        />
+      ))}
+
+      {/* Layer 8 — faint blueprint grid */}
+      <div className="auth-blueprint" aria-hidden="true" />
+
+      {/* Layer 9 — spotlight anchored behind the logo (page-level; the
+          tighter halo sits right behind the logo wrapper, below) */}
+      <div className="auth-logo-spotlight" aria-hidden="true" />
+
+      {/* Layer 10 — slow ambient reflections */}
+      {REFLECTIONS.map((r, i) => (
+        <div
+          key={i}
+          className="auth-reflection"
+          style={{ animationDuration: `${r.duration}s`, animationDelay: `${r.delay}s` }}
+          aria-hidden="true"
+        />
+      ))}
 
       <div className="dl-stagger relative z-10 w-full max-w-md">
         <div className="relative mb-8 flex flex-col items-center text-center">
