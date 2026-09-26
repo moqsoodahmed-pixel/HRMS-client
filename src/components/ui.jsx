@@ -7,19 +7,51 @@ import { humanise, formatFileSize } from '../lib/format';
 /* Animated brand logo                                                 */
 /* ------------------------------------------------------------------ */
 
-const LOGO_SRC = '/dutylaunch-logo.webp';
+// The exact original /dutylaunch-logo.webp with ONLY its flat white
+// backing matted out to transparency — see the one-off script that
+// produced it. Every pixel of the shield and wordmark is untouched; nothing
+// is redrawn, recolored, re-vectorized or resized. This is the single
+// source every <AnimatedLogo /> instance renders from.
+const LOGO_SRC = '/dutylaunch-logo-transparent.webp';
 
-// Fixed converge offsets for the pre-assembly "sparks" (see index.css'
-// dl-spark-converge keyframe) — plain numbers, not randomized on every
-// render, so the animation is deterministic and never causes a reflow.
+// One crop per "beat" of the assembly sequence, in the order they lock
+// into place: shield-less "D", then the rest of "Duty", then "L", then
+// the rest of "Launch", then the shield icon (see index.css' dl-seg-*
+// keyframes — these class names must match the ones defined there).
+// clip-path percentages were measured directly from the real asset's
+// content bounds (see the extraction script), not guessed, so each crop
+// line falls in the natural gap between letters/the shield.
+const LOGO_SEGMENTS = ['icon', 'd', 'uty', 'l', 'aunch'];
+
+// Fixed (not re-randomized per render) positions for the small ambient
+// "converging fragment" sparks that flicker in as each beat locks —
+// deterministic so the animation never causes a layout reflow.
 const SPARK_POSITIONS = [
-  { top: '10%', left: '6%', x: '34px', y: '-28px', size: 5, delay: 0 },
-  { top: '70%', left: '10%', x: '30px', y: '24px', size: 4, delay: 90 },
-  { top: '15%', left: '90%', x: '-32px', y: '-24px', size: 4, delay: 160 },
-  { top: '80%', left: '86%', x: '-28px', y: '26px', size: 6, delay: 60 },
-  { top: '45%', left: '2%', x: '38px', y: '0px', size: 3, delay: 220 },
-  { top: '40%', left: '96%', x: '-36px', y: '4px', size: 3, delay: 130 },
+  { top: '8%', left: '4%', size: 4 }, { top: '18%', left: '96%', size: 3 },
+  { top: '30%', left: '2%', size: 3 }, { top: '42%', left: '98%', size: 4 },
+  { top: '55%', left: '3%', size: 3 }, { top: '68%', left: '95%', size: 5 },
+  { top: '78%', left: '8%', size: 4 }, { top: '85%', left: '90%', size: 3 },
+  { top: '12%', left: '50%', size: 3 }, { top: '90%', left: '46%', size: 4 },
 ];
+
+// Fixed burst vectors for the shatter fragments — each one a plain
+// {dx, dy, rot} triple consumed as CSS custom properties by the single
+// shared dl-shatter-piece keyframe, so ~40 shards animate without 40
+// separate keyframe definitions.
+const SHARD_COUNT = 40;
+const SHARDS = Array.from({ length: SHARD_COUNT }, (_, i) => {
+  const angle = (i / SHARD_COUNT) * Math.PI * 2 + (i % 3);
+  const dist = 46 + ((i * 37) % 60);
+  return {
+    top: `${10 + ((i * 53) % 80)}%`,
+    left: `${5 + ((i * 29) % 90)}%`,
+    size: 2 + (i % 3) * 2,
+    dx: `${(Math.cos(angle) * dist).toFixed(0)}px`,
+    dy: `${(Math.sin(angle) * dist).toFixed(0)}px`,
+    rot: `${((i * 47) % 140) - 70}deg`,
+    delay: `${-((i * 53) % 220)}ms`,
+  };
+});
 
 /**
  * The one place the DutyLaunch logo file is referenced. Every screen
@@ -27,45 +59,54 @@ const SPARK_POSITIONS = [
  * render this instead of a raw <img>, so the animation — and any future
  * logo update — only needs to happen in one spot.
  *
- * The ORIGINAL /dutylaunch-logo.webp is never redrawn, re-vectorized, or
- * distorted: `.dl-logo__base` is that exact unmodified file and is the
- * only thing left visible once the animation settles (or immediately,
- * under `prefers-reduced-motion` or when `reveal` is false). The
- * one-time "assembly" effect on mount is produced by layering a few
- * `clip-path` crops of that SAME image file (icon / "Duty" / "Launch")
- * that slide into alignment with the base and then fade out — see the
- * `dl-logo--reveal` rules in index.css for the exact timing.
+ * By default (`reveal = true`) it plays a forever-looping cinematic
+ * sequence: tiny glass fragments converge, the letter "D" assembles
+ * first, pauses, the rest of "Duty" assembles left-to-right, pauses,
+ * "L" assembles, pauses, the rest of "Launch" assembles, the shield
+ * locks in, the complete mark holds for ~2s, then shatters into
+ * fragments and the cycle restarts — entirely via `clip-path` crops and
+ * `transform`/`opacity`/`filter` keyframes on the SAME unmodified image
+ * (see index.css), so the assembled frame is always pixel-identical to
+ * the original file. Pass `reveal={false}` for a context where a
+ * continuously animating mark would be too busy (e.g. a compact toolbar
+ * icon) — that renders the plain, always-visible logo with no motion at
+ * all. `prefers-reduced-motion` does the same automatically.
  */
 export function AnimatedLogo({ className = 'h-10', alt = 'DutyLaunch', reveal = true }) {
   return (
-    <span className={`dl-logo ${className}`} style={{ '--dl-logo-mask': `url(${LOGO_SRC})` }}>
-      <span className={`dl-logo__stage ${reveal ? 'dl-logo--reveal' : ''}`}>
+    // A single accessible name lives on this wrapper (role="img") because
+    // the actual pixels underneath are split across several decorative
+    // crops that individually mean nothing to a screen reader — the mark
+    // should always read as one thing, regardless of animation state.
+    <span className={`dl-logo ${reveal ? 'dl-logo--loop' : 'dl-logo--static'} ${className}`} role="img" aria-label={alt}>
+      <span className="dl-logo__stage">
+        <img src={LOGO_SRC} alt="" aria-hidden="true" className={`dl-logo__sizer ${className} w-auto object-contain`} />
+
         {reveal && SPARK_POSITIONS.map((s, i) => (
+          <span key={i} className="dl-logo__spark" style={{ top: s.top, left: s.left, width: s.size, height: s.size }} />
+        ))}
+
+        {LOGO_SEGMENTS.map((seg) => (
+          <img
+            key={seg}
+            src={LOGO_SRC}
+            alt=""
+            aria-hidden="true"
+            className={`dl-logo__seg dl-logo__seg--${seg} ${className} w-auto object-contain`}
+          />
+        ))}
+
+        {reveal && SHARDS.map((s, i) => (
           <span
             key={i}
-            className="dl-logo__spark"
+            className="dl-logo__shard"
             style={{
-              top: s.top,
-              left: s.left,
-              width: s.size,
-              height: s.size,
-              animationDelay: `${s.delay}ms`,
-              '--dl-spark-x': s.x,
-              '--dl-spark-y': s.y,
+              top: s.top, left: s.left, width: s.size, height: s.size,
+              animationDelay: s.delay,
+              '--dx': s.dx, '--dy': s.dy, '--rot': s.rot,
             }}
           />
         ))}
-        {reveal && <img src={LOGO_SRC} alt="" aria-hidden="true" className={`dl-logo__frag dl-logo__frag--icon ${className} w-auto object-contain`} />}
-        {reveal && <img src={LOGO_SRC} alt="" aria-hidden="true" className={`dl-logo__frag dl-logo__frag--text1 ${className} w-auto object-contain`} />}
-        {reveal && <img src={LOGO_SRC} alt="" aria-hidden="true" className={`dl-logo__frag dl-logo__frag--text2 ${className} w-auto object-contain`} />}
-        {reveal && <span className="dl-logo__streak" />}
-        <img
-          src={LOGO_SRC}
-          alt={alt}
-          className={`dl-logo__base ${className} w-auto object-contain`}
-          style={reveal ? undefined : { opacity: 1 }}
-        />
-        <span className="dl-logo__shimmer" />
       </span>
     </span>
   );

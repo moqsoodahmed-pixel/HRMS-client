@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, AlertCircle, Mail, Lock, ShieldCheck, Check } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Mail, ShieldCheck, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../api/axios';
@@ -167,8 +167,10 @@ export default function Login() {
 
       <div className="dl-stagger relative z-10 w-full max-w-md">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-5 flex items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-7 py-4 backdrop-blur-sm">
-            <AnimatedLogo className="h-11" />
+          {/* No card, no box, no plate — the mark floats directly on the
+              scene, exactly as asked. */}
+          <div className="mb-4">
+            <AnimatedLogo className="h-16" />
           </div>
           <p className="flex items-center gap-1.5 text-sm font-medium tracking-wide text-indigo-200/90">
             <ShieldCheck className="h-4 w-4 text-cyan-300" /> HRMS Portal
@@ -189,24 +191,23 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <FormField label="Email address" required>
               <div className="auth-input-wrap">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   type="email"
-                  className={`auth-input pl-10 ${shake ? 'is-invalid' : ''}`}
+                  className={`auth-input pr-10 ${shake ? 'is-invalid' : ''}`}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="username"
                   required
                 />
+                <Mail className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               </div>
             </FormField>
 
             <FormField label="Password" required>
               <div className="auth-input-wrap">
-                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  className={`auth-input pl-10 pr-10 ${shake ? 'is-invalid' : ''}`}
+                  className={`auth-input pr-10 ${shake ? 'is-invalid' : ''}`}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
