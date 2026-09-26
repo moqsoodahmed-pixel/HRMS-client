@@ -11,18 +11,22 @@ import { getCurrentLocation } from '../lib/geolocation';
 // Fixed (not re-randomized per render) so the ambient particle field
 // never causes a reflow or a visual "jump" on re-render — only generated
 // once, on module load.
-const PARTICLES = Array.from({ length: 16 }, (_, i) => ({
+const PARTICLES = Array.from({ length: 18 }, (_, i) => ({
   left: `${(i * 37 + 5) % 100}%`,
   size: 2 + ((i * 7) % 3),
-  duration: 14 + ((i * 5) % 10),
+  duration: 15 + ((i * 5) % 12),
   delay: -(i * 1.3),
 }));
 
-const SHARDS = [
-  { top: '14%', left: '14%', size: 90, rotate: 18 },
-  { top: '68%', left: '20%', size: 60, rotate: -10 },
-  { top: '20%', left: '80%', size: 70, rotate: 8 },
-  { top: '72%', left: '82%', size: 110, rotate: -16 },
+// Floating glass panels (diamonds/hexagons) — kept away from the scene's
+// center so they never cross behind the logo or the Sign In card, per the
+// "highlight, don't compete with" requirement.
+const PANELS = [
+  { top: '10%', left: '9%', size: 110, rotate: 14, shape: 'diamond', dx: '-14px', dy: '18px', depth: 0.5 },
+  { top: '72%', left: '6%', size: 150, rotate: -8, shape: 'hex', dx: '12px', dy: '-16px', depth: 0.35 },
+  { top: '16%', left: '86%', size: 90, rotate: 22, shape: 'hex', dx: '-10px', dy: '14px', depth: 0.6 },
+  { top: '78%', left: '88%', size: 130, rotate: -18, shape: 'diamond', dx: '16px', dy: '-12px', depth: 0.4 },
+  { top: '46%', left: '3%', size: 60, rotate: 6, shape: 'diamond', dx: '10px', dy: '10px', depth: 0.7 },
 ];
 
 /** True once, read synchronously so the very first render already knows
@@ -117,26 +121,29 @@ export default function Login() {
 
   return (
     <div ref={sceneRef} className="auth-scene flex min-h-screen items-center justify-center p-4">
-      {/* Layered depth background — mesh gradient, light rays, drifting
-          fog, moving light beams, floating glass shards, an ambient
-          particle field and two slow orbs. Every layer is pure CSS
-          (transform/opacity), and the whole stack is skipped in favor of
-          a still frame under prefers-reduced-motion (see index.css). */}
-      <div className="auth-scene__mesh auth-parallax" style={{ '--depth': 0.6 }} aria-hidden="true" />
-      <div className="auth-scene__rays" aria-hidden="true" />
-      <div className="auth-scene__fog" aria-hidden="true" />
+      {/* Enterprise cinematic stage background — a distant floor grid, two
+          slow aurora washes, a rotating volumetric light column + a tighter
+          spotlight anchored behind the logo, floating glass panels, a fine
+          particle field, one slow light sweep and a soft floor glow. Every
+          layer is transform/opacity animated (GPU-friendly, no layout
+          thrash) and z-index 0 — strictly behind the logo/card, which live
+          in the z-index 10 block below and are completely untouched. The
+          whole stack collapses to a still frame under
+          prefers-reduced-motion (see index.css). */}
+      <div className="auth-grid auth-parallax" style={{ '--depth': 0.3 }} aria-hidden="true" />
+      <div className="auth-aurora auth-aurora--a auth-parallax" style={{ '--depth': 0.5 }} aria-hidden="true" />
+      <div className="auth-aurora auth-aurora--b auth-parallax" style={{ '--depth': 0.6 }} aria-hidden="true" />
+      <div className="auth-godray" aria-hidden="true" />
+      <div className="auth-spotlight" aria-hidden="true" />
 
-      <div className="auth-beam auth-parallax" style={{ top: '22%', left: '5%', width: '38%', '--depth': 1.2 }} aria-hidden="true" />
-      <div className="auth-beam auth-parallax" style={{ top: '74%', left: '55%', width: '42%', animationDelay: '4s', '--depth': 0.9 }} aria-hidden="true" />
-
-      {SHARDS.map((s, i) => (
+      {PANELS.map((p, i) => (
         <div
           key={i}
-          className="auth-shard auth-parallax"
+          className={`auth-panel auth-panel--${p.shape} auth-parallax`}
           style={{
-            top: s.top, left: s.left, width: s.size, height: s.size,
-            '--r': `${s.rotate}deg`, '--depth': 0.5 + i * 0.15,
-            animationDelay: `${i * 1.2}s`,
+            top: p.top, left: p.left, width: p.size, height: p.size,
+            '--r': `${p.rotate}deg`, '--dx': p.dx, '--dy': p.dy, '--depth': p.depth,
+            animationDelay: `${i * 1.4}s`, animationDuration: `${18 + i * 2}s`,
           }}
           aria-hidden="true"
         />
@@ -145,7 +152,7 @@ export default function Login() {
       {!reducedMotion && PARTICLES.map((p, i) => (
         <span
           key={i}
-          className="auth-particle"
+          className="auth-node"
           style={{
             left: p.left, bottom: '-4%', width: p.size, height: p.size,
             animationDuration: `${p.duration}s`, animationDelay: `${p.delay}s`,
@@ -154,25 +161,20 @@ export default function Login() {
         />
       ))}
 
-      <div
-        className="auth-orb h-72 w-72 bg-indigo-500/30 auth-parallax"
-        style={{ top: '8%', left: '8%', animation: 'dl-orb-float-a 12s ease-in-out infinite', '--depth': 1.4 }}
-        aria-hidden="true"
-      />
-      <div
-        className="auth-orb h-96 w-96 bg-cyan-400/20 auth-parallax"
-        style={{ bottom: '4%', right: '6%', animation: 'dl-orb-float-b 15s ease-in-out infinite', '--depth': 1.1 }}
-        aria-hidden="true"
-      />
+      <div className="auth-sweep" aria-hidden="true" />
+      <div className="auth-floor-glow" aria-hidden="true" />
 
       <div className="dl-stagger relative z-10 w-full max-w-md">
-        <div className="mb-8 flex flex-col items-center text-center">
+        <div className="relative mb-8 flex flex-col items-center text-center">
           {/* No card, no box, no plate — the mark floats directly on the
-              scene, exactly as asked. */}
-          <div className="mb-4">
+              scene, exactly as asked. The halo is a sibling behind it
+              (lower in the stacking order), never touching AnimatedLogo
+              itself, so the logo now reads as lit from behind. */}
+          <div className="auth-logo-halo" aria-hidden="true" />
+          <div className="relative mb-4">
             <AnimatedLogo className="h-16" />
           </div>
-          <p className="flex items-center gap-1.5 text-sm font-medium tracking-wide text-indigo-200/90">
+          <p className="relative flex items-center gap-1.5 text-sm font-medium tracking-wide text-indigo-200/90">
             <ShieldCheck className="h-4 w-4 text-cyan-300" /> HRMS Portal
           </p>
         </div>

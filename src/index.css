@@ -553,88 +553,208 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   LOGIN EXPERIENCE — cinematic depth background + glass card
-   ══════════════════════════════════════════════════════════════════════ */
+   LOGIN EXPERIENCE — enterprise cinematic stage background + glass card
+   ══════════════════════════════════════════════════════════════════════
+   Everything in this section renders BEHIND .dl-stagger (z-index 0 vs 1)
+   and is purely decorative (aria-hidden, pointer-events: none) — none of
+   it touches the AnimatedLogo component or the .auth-card / .auth-input* /
+   .auth-check / .auth-btn rules further down, which are the Sign In card
+   and are deliberately untouched. The goal: a layered "enterprise HQ
+   stage" — deep navy/royal-blue/azure lighting, a distant floor grid,
+   slow aurora washes, a rotating volumetric light column anchored behind
+   the logo, floating glass panels, a fine particle field and a single
+   slow-moving light sweep — all transform/opacity animated (GPU-friendly)
+   and slow enough to never distract from the card or the logo. */
 
 .auth-scene {
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  background: linear-gradient(160deg, #060a1a 0%, #0b1230 45%, #0e1a3d 100%);
+  background: linear-gradient(165deg, #050914 0%, #0a1024 30%, #0d1730 55%, #0a1830 80%, #071022 100%);
   perspective: 1400px;
 }
 
-.auth-scene__mesh {
+/* Soft vignette: gently darkens the corners and lifts the center-top (where
+   the logo sits) so the eye is drawn there without any extra element. */
+.auth-scene::after {
+  content: '';
   position: absolute;
-  inset: -10%;
+  inset: 0;
   z-index: 0;
   background:
-    radial-gradient(38% 42% at 18% 22%, rgba(56, 189, 248, 0.35), transparent 60%),
-    radial-gradient(42% 46% at 82% 18%, rgba(99, 102, 241, 0.35), transparent 62%),
-    radial-gradient(46% 50% at 50% 88%, rgba(45, 212, 191, 0.18), transparent 65%);
-  filter: blur(30px) saturate(120%);
-  animation: dl-mesh-drift 24s ease-in-out infinite alternate;
+    radial-gradient(60% 50% at 50% 18%, rgba(99, 179, 237, 0.10), transparent 70%),
+    radial-gradient(120% 90% at 50% 100%, rgba(2, 6, 20, 0.55), transparent 60%),
+    radial-gradient(140% 100% at 50% 0%, transparent 55%, rgba(2, 5, 16, 0.5) 100%);
+  pointer-events: none;
+}
+
+/* ── Distant floor grid — a faint perspective plane low in the scene,
+   suggesting an enterprise data-floor rather than empty space. Nearly
+   static (nothing here should compete for attention); only the faintest
+   glow breathes through it. */
+.auth-grid {
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  bottom: -12%;
+  height: 60%;
+  z-index: 0;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(148, 197, 255, 0.10) 0px, rgba(148, 197, 255, 0.10) 1px, transparent 1px, transparent 64px),
+    repeating-linear-gradient(0deg, rgba(148, 197, 255, 0.07) 0px, rgba(148, 197, 255, 0.07) 1px, transparent 1px, transparent 64px);
+  transform: perspective(700px) rotateX(62deg);
+  transform-origin: bottom;
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent 85%);
+  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent 85%);
+  animation: auth-grid-breathe 10s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ── Aurora washes — two large, very soft diagonal ribbons of color that
+   drift slowly, standing in for the old radial "blobs" with something
+   more directional and premium. */
+.auth-aurora {
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(60px);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.auth-aurora--a {
+  top: -18%;
+  left: -12%;
+  width: 70%;
+  height: 60%;
+  background: linear-gradient(135deg, rgba(67, 56, 202, 0.30), rgba(56, 189, 248, 0.10) 60%, transparent 80%);
+  animation: auth-aurora-drift-a 28s ease-in-out infinite alternate;
+}
+
+.auth-aurora--b {
+  bottom: -22%;
+  right: -14%;
+  width: 65%;
+  height: 55%;
+  background: linear-gradient(315deg, rgba(30, 64, 175, 0.28), rgba(129, 140, 248, 0.10) 55%, transparent 78%);
+  animation: auth-aurora-drift-b 32s ease-in-out infinite alternate;
+}
+
+/* ── Volumetric light column — a slowly rotating conic wash anchored
+   behind the logo's position, standing in for a soft spotlight/godray so
+   the logo reads as the brightest point in the scene. */
+.auth-godray {
+  position: absolute;
+  top: -30%;
+  left: 50%;
+  width: 130vmax;
+  height: 130vmax;
+  z-index: 0;
+  transform: translateX(-50%);
+  background: conic-gradient(from 0deg,
+      transparent 0deg,
+      rgba(125, 211, 252, 0.05) 40deg,
+      transparent 90deg,
+      transparent 210deg,
+      rgba(99, 102, 241, 0.05) 260deg,
+      transparent 320deg,
+      transparent 360deg);
+  filter: blur(6px);
+  animation: auth-godray-spin 90s linear infinite;
+  pointer-events: none;
+}
+
+/* Focused soft spotlight sitting tighter behind the logo than the wide
+   rotating column above — this is what keeps the logo reading as "the
+   brightest visual focus" regardless of where the godray has rotated to. */
+.auth-spotlight {
+  position: absolute;
+  top: 4%;
+  left: 50%;
+  width: 640px;
+  max-width: 90vw;
+  height: 420px;
+  z-index: 0;
+  transform: translateX(-50%);
+  background: radial-gradient(45% 55% at 50% 30%, rgba(147, 197, 253, 0.20), transparent 72%);
+  filter: blur(4px);
+  animation: auth-spotlight-breathe 7s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ── Floating glass panels — thin-bordered translucent geometric shapes
+   (diamonds/hexagons via clip-path), not rounded squares, drifting and
+   rotating slowly at the scene's edges so they never cross the card. */
+.auth-panel {
+  position: absolute;
+  z-index: 0;
+  border: 1px solid rgba(191, 219, 254, 0.16);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.07), rgba(148, 197, 255, 0.02));
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+  animation: auth-panel-float 20s ease-in-out infinite;
   will-change: transform;
 }
 
-.auth-scene__rays {
+.auth-panel--diamond {
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+.auth-panel--hex {
+  clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+}
+
+/* ── Fine particle field — small drifting light points, standing in for
+   an ambient "enterprise network" texture rather than a generic starfield. */
+.auth-node {
+  position: absolute;
+  z-index: 0;
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 9999px;
+  background: rgba(191, 219, 254, 0.7);
+  box-shadow: 0 0 5px 1px rgba(147, 197, 253, 0.5);
+  animation: auth-node-drift linear infinite;
+  pointer-events: none;
+}
+
+/* ── Single slow light sweep — one wide, very soft diagonal band of
+   light passing across the whole scene, standing in for "moving light
+   rays" without ever feeling like a flash. */
+.auth-sweep {
+  position: absolute;
+  inset: -20% -10%;
+  z-index: 0;
+  background: linear-gradient(100deg, transparent 42%, rgba(191, 219, 254, 0.05) 49%, rgba(191, 219, 254, 0.08) 50%, rgba(191, 219, 254, 0.05) 51%, transparent 58%);
+  animation: auth-sweep-pass 13s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ── Faint reflective floor glow beneath the card/logo — a soft, low wash
+   suggesting a glossy enterprise floor rather than empty black space. */
+.auth-floor-glow {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.035) 0px, rgba(255, 255, 255, 0.035) 1px, transparent 1px, transparent 90px);
-  mix-blend-mode: screen;
-  opacity: 0.5;
-}
-
-.auth-scene__fog {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: radial-gradient(60% 45% at 50% 100%, rgba(56, 189, 248, 0.14), transparent 70%);
-  animation: dl-fog-drift 18s ease-in-out infinite alternate;
+  background: radial-gradient(55% 40% at 50% 102%, rgba(56, 189, 248, 0.12), transparent 70%);
+  animation: auth-floor-breathe 16s ease-in-out infinite alternate;
   pointer-events: none;
 }
 
-.auth-beam {
+/* ── Logo halo — sits directly behind the logo wrapper in Login.jsx (a
+   sibling element, never touching AnimatedLogo itself) so the mark reads
+   as lit from behind. */
+.auth-logo-halo {
   position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 340px;
+  height: 200px;
   z-index: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.5), transparent);
-  filter: blur(1px);
-  animation: dl-beam-drift 14s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.auth-orb {
-  position: absolute;
-  z-index: 0;
-  border-radius: 9999px;
-  filter: blur(2px);
-  will-change: transform;
-  pointer-events: none;
-}
-
-.auth-shard {
-  position: absolute;
-  z-index: 0;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.01));
-  backdrop-filter: blur(1px);
-  border-radius: 22%;
-  pointer-events: none;
-  animation: dl-shard-float 16s ease-in-out infinite;
-  will-change: transform;
-}
-
-.auth-particle {
-  position: absolute;
-  z-index: 0;
-  width: 3px;
-  height: 3px;
-  border-radius: 9999px;
-  background: rgba(191, 219, 254, 0.75);
-  box-shadow: 0 0 6px 1px rgba(147, 197, 253, 0.55);
-  animation: dl-particle-drift linear infinite;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(50% 60% at 50% 50%, rgba(129, 140, 248, 0.35), rgba(56, 189, 248, 0.14) 55%, transparent 78%);
+  filter: blur(18px);
+  animation: auth-halo-breathe 6s ease-in-out infinite;
   pointer-events: none;
 }
 
@@ -643,95 +763,137 @@
   transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes dl-mesh-drift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
+@keyframes auth-grid-breathe {
+
+  0%,
+  100% {
+    opacity: 0.6;
   }
 
-  100% {
-    transform: translate3d(-2%, 2%, 0) scale(1.06);
+  50% {
+    opacity: 0.9;
   }
 }
 
-@keyframes dl-fog-drift {
+@keyframes auth-aurora-drift-a {
   0% {
-    opacity: 0.5;
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.85;
+  }
+
+  100% {
+    transform: translate3d(3%, 4%, 0) scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes auth-aurora-drift-b {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: translate3d(-3%, -3%, 0) scale(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes auth-godray-spin {
+  0% {
+    transform: translateX(-50%) rotate(0deg);
+  }
+
+  100% {
+    transform: translateX(-50%) rotate(360deg);
+  }
+}
+
+@keyframes auth-spotlight-breathe {
+
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: translateX(-50%) scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.06);
+  }
+}
+
+@keyframes auth-panel-float {
+
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--r, 10deg));
+    opacity: 0.8;
+  }
+
+  50% {
+    transform: translate3d(var(--dx, -10px), var(--dy, 14px), 0) rotate(calc(var(--r, 10deg) + 6deg));
+    opacity: 1;
+  }
+}
+
+@keyframes auth-node-drift {
+  0% {
+    transform: translate3d(0, 8vh, 0);
+    opacity: 0;
+  }
+
+  12% {
+    opacity: 0.85;
+  }
+
+  88% {
+    opacity: 0.55;
+  }
+
+  100% {
+    transform: translate3d(0, -8vh, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes auth-sweep-pass {
+
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateX(-10%);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateX(10%);
+  }
+}
+
+@keyframes auth-floor-breathe {
+  0% {
+    opacity: 0.55;
     transform: translateY(0);
   }
 
   100% {
-    opacity: 0.8;
-    transform: translateY(-2%);
+    opacity: 0.85;
+    transform: translateY(-1.5%);
   }
 }
 
-@keyframes dl-beam-drift {
+@keyframes auth-halo-breathe {
 
   0%,
   100% {
-    opacity: 0;
-    transform: translateX(-8%);
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(1);
   }
 
   50% {
-    opacity: 0.8;
-    transform: translateX(8%);
-  }
-}
-
-@keyframes dl-orb-float-a {
-
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0);
-  }
-
-  50% {
-    transform: translate3d(18px, -26px, 0);
-  }
-}
-
-@keyframes dl-orb-float-b {
-
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0);
-  }
-
-  50% {
-    transform: translate3d(-22px, 20px, 0);
-  }
-}
-
-@keyframes dl-shard-float {
-
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) rotate(var(--r, 12deg));
-  }
-
-  50% {
-    transform: translate3d(-10px, 14px, 0) rotate(calc(var(--r, 12deg) + 4deg));
-  }
-}
-
-@keyframes dl-particle-drift {
-  0% {
-    transform: translate3d(0, 10vh, 0);
-    opacity: 0;
-  }
-
-  10% {
-    opacity: 0.9;
-  }
-
-  90% {
-    opacity: 0.6;
-  }
-
-  100% {
-    transform: translate3d(0, -10vh, 0);
-    opacity: 0;
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
   }
 }
 
@@ -989,12 +1151,15 @@
 
 @media (prefers-reduced-motion: reduce) {
 
-  .auth-scene__mesh,
-  .auth-scene__fog,
-  .auth-beam,
-  .auth-orb,
-  .auth-shard,
-  .auth-particle,
+  .auth-grid,
+  .auth-aurora,
+  .auth-godray,
+  .auth-spotlight,
+  .auth-panel,
+  .auth-node,
+  .auth-sweep,
+  .auth-floor-glow,
+  .auth-logo-halo,
   .auth-btn,
   .auth-btn::after,
   .auth-card {
