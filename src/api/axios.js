@@ -108,8 +108,15 @@ export const attendanceAPI = {
   absentees: (params) => api.get('/attendance/absentees', { params: clean(params) }),
   stats: (params) => api.get('/attendance/stats', { params: clean(params) }),
   today: () => api.get('/attendance/me/today'),
-  checkIn: () => api.post('/attendance/checkin'),
-  checkOut: () => api.post('/attendance/checkout'),
+  // `location`/`deviceSignal` mirror what login() already sends (see
+  // context/AuthContext.jsx login() and lib/geolocation.js) — the server
+  // now re-checks device/location on check-in/check-out too (previously
+  // only login was ever gated, so a session that got past login once could
+  // check in from anywhere, from any device, forever after). Both are
+  // optional/best-effort; an exempt role or a policy that's turned off
+  // never needs them.
+  checkIn: (location, deviceSignal) => api.post('/attendance/checkin', { location: location || undefined }, deviceSignal ? { headers: { 'X-Device-Signal': deviceSignal } } : undefined),
+  checkOut: (location, deviceSignal) => api.post('/attendance/checkout', { location: location || undefined }, deviceSignal ? { headers: { 'X-Device-Signal': deviceSignal } } : undefined),
   undoCheckOut: () => api.post('/attendance/checkout/undo'),
   breakStart: () => api.post('/attendance/break/start'),
   breakEnd: () => api.post('/attendance/break/end'),

@@ -14,6 +14,7 @@ import {
   policyAPI, onboardingAPI, offboardingAPI, compensationAPI, auditAPI, performanceAPI, leadsAPI,
 } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import { getCurrentLocation, getDeviceSignal } from '../lib/geolocation';
 import {
   PageHeader, StatCard, StatCardSkeleton, ErrorState, EmptyState, Avatar, StatusBadge,
   ProgressBar, Modal, FormField,
@@ -1125,13 +1126,17 @@ function EmployeeDashboard() {
     queryClient.invalidateQueries({ queryKey: ['attendance'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
+  // Same device/location capture the login form uses (lib/geolocation.js) —
+  // the server now re-checks device/location on check-in/check-out, not
+  // just at login, so this needs to be sent here too (see
+  // attendanceController.js assertAttendanceAccess).
   const checkIn = useMutation({
-    mutationFn: () => attendanceAPI.checkIn(),
+    mutationFn: async () => attendanceAPI.checkIn(await getCurrentLocation(), getDeviceSignal()),
     onSuccess: () => { toast.success('Checked in'); refreshAttendance(); },
     onError: (err) => toast.error(errorMessage(err)),
   });
   const checkOut = useMutation({
-    mutationFn: () => attendanceAPI.checkOut(),
+    mutationFn: async () => attendanceAPI.checkOut(await getCurrentLocation(), getDeviceSignal()),
     onSuccess: () => {
       toast.success('Checked out');
       setConfirmingCheckOut(false);
