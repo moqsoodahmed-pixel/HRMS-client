@@ -71,29 +71,46 @@
   }
 }
 
-/* ── Animated brand logo ───────────────────────────────────────────────
-   Wraps the ORIGINAL, unmodified logo image. Nothing here redraws or
-   distorts the mark — it only adds a masked light-sweep, a slow ambient
-   glow "breath", and a very small floating parallax, all GPU-accelerated
-   (transform/opacity only) so it's cheap to run everywhere the logo
-   appears (login, sidebar, and any future usage of <AnimatedLogo />). */
+
+/* ══════════════════════════════════════════════════════════════════════
+   ANIMATED BRAND LOGO — one reusable system used everywhere the
+   DutyLaunch mark appears (login, sidebar, any future screen).
+
+   Important constraint this whole block honors: the source file
+   (/dutylaunch-logo.webp) is a single flat raster image — it is never
+   redrawn, re-vectorized, recolored or redistorted anywhere below. The
+   "assembly" effect is produced by layering a few CSS clip-path CROPS of
+   that exact same image file on top of a fully-visible, always-correct
+   base copy of it, animating those crops into alignment, then fading
+   them out — so the instant the animation ends (or never runs, e.g.
+   under reduced motion) what's on screen is 100% pixel-identical to the
+   original file, because it literally is the original <img>.
+   ══════════════════════════════════════════════════════════════════════ */
+
 .dl-logo {
   position: relative;
   display: inline-flex;
-  will-change: transform;
-  animation: dl-logo-float 6s ease-in-out infinite;
   transform: translateZ(0);
 }
 
-.dl-logo img {
+.dl-logo__stage {
+  position: relative;
+  display: inline-flex;
+  animation: dl-logo-float 6.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* The single source of truth — always present, always the untouched
+   image. Everything else is decorative layers on top of it. */
+.dl-logo__base {
   position: relative;
   z-index: 1;
   display: block;
   filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.08));
 }
 
-.dl-logo::before {
-  /* Ambient blue "breathing" glow behind the mark */
+/* Ambient blue "breathing" glow behind the mark — continuous, subtle. */
+.dl-logo__stage::before {
   content: '';
   position: absolute;
   inset: -35%;
@@ -104,20 +121,14 @@
   pointer-events: none;
 }
 
-.dl-logo::after {
-  /* Diagonal light sweep, masked to the exact silhouette of the logo
-     image itself — so the shine only ever appears inside the shield,
-     never as a rectangle or overlay artifact. */
-  content: '';
+/* Continuous glass shimmer, masked to the exact silhouette of the logo
+   image itself so it never appears as a rectangle. */
+.dl-logo__shimmer {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 3;
   pointer-events: none;
-  background: linear-gradient(115deg,
-      transparent 30%,
-      rgba(255, 255, 255, 0.75) 48%,
-      rgba(186, 230, 253, 0.55) 52%,
-      transparent 70%);
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.75) 48%, rgba(186, 230, 253, 0.55) 52%, transparent 70%);
   background-size: 250% 250%;
   -webkit-mask-image: var(--dl-logo-mask);
   mask-image: var(--dl-logo-mask);
@@ -127,8 +138,84 @@
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  animation: dl-logo-sweep 5s ease-in-out infinite;
-  opacity: 0.9;
+  animation: dl-logo-sweep 5.5s ease-in-out infinite;
+  animation-delay: 1.4s;
+  opacity: 0;
+}
+
+/* ── One-time cinematic reveal (plays once per mount) ─────────────────── */
+
+.dl-logo__frag {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: block;
+  pointer-events: none;
+}
+
+/* Each fragment is the exact same image, just cropped with clip-path to
+   one region of the horizontal DutyLaunch lockup (icon / "Duty" /
+   "Launch" — measured from the real asset's content bounds, not
+   guessed), so the crop lines fall in the natural gaps between the
+   shield and the wordmark rather than cutting through a letter. */
+.dl-logo--reveal .dl-logo__frag--icon {
+  animation: dl-frag-icon 1.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.15s;
+  clip-path: inset(0 77% 0 0);
+}
+
+.dl-logo--reveal .dl-logo__frag--text1 {
+  animation: dl-frag-text-left 0.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.55s;
+  clip-path: inset(0 46% 0 23%);
+}
+
+.dl-logo--reveal .dl-logo__frag--text2 {
+  animation: dl-frag-text-right 0.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.75s;
+  clip-path: inset(0 0 0 54%);
+}
+
+/* Base logo stays invisible until the fragments have locked into place,
+   then the base fades up underneath as the fragments fade out — the
+   handoff is invisible because both are the same pixels in the same
+   position at that instant. */
+.dl-logo--reveal .dl-logo__base {
+  animation: dl-frag-base-in 0.3s linear both;
+  animation-delay: 1.05s;
+}
+
+.dl-logo--reveal .dl-logo__shimmer {
+  animation-delay: 1.6s;
+}
+
+/* One-time light streak once assembly locks */
+.dl-logo__streak {
+  position: absolute;
+  inset: -20% -60%;
+  z-index: 4;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 42%, rgba(255, 255, 255, 0.9) 50%, transparent 58%);
+  opacity: 0;
+}
+
+.dl-logo--reveal .dl-logo__streak {
+  animation: dl-streak-pass 0.6s ease-out both;
+  animation-delay: 1.05s;
+}
+
+/* Pre-assembly particles / glass shards converging toward the mark */
+.dl-logo__spark {
+  position: absolute;
+  z-index: 5;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(224, 242, 254, 0.95), rgba(99, 102, 241, 0.2) 70%, transparent 100%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.dl-logo--reveal .dl-logo__spark {
+  animation: dl-spark-converge 0.95s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes dl-logo-float {
@@ -158,46 +245,161 @@
 }
 
 @keyframes dl-logo-sweep {
-  0% {
+
+  0%,
+  100% {
     background-position: -60% -60%;
     opacity: 0;
   }
 
   15% {
-    opacity: 0.9;
+    opacity: 0.85;
   }
 
   45% {
     background-position: 60% 60%;
-    opacity: 0.9;
+    opacity: 0.85;
   }
 
   60% {
     opacity: 0;
   }
+}
+
+@keyframes dl-frag-icon {
+  0% {
+    opacity: 0.95;
+    transform: translate3d(-38px, -46px, 0) rotate(-14deg) scale(0.72);
+    filter: blur(5px);
+  }
+
+  70% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0) scale(1);
+    filter: blur(0);
+  }
 
   100% {
-    background-position: 60% 60%;
     opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes dl-frag-text-left {
+  0% {
+    opacity: 0.95;
+    transform: translate3d(-46px, 0, 0);
+    filter: blur(4px);
+  }
+
+  65% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+  }
+}
+
+@keyframes dl-frag-text-right {
+  0% {
+    opacity: 0.95;
+    transform: translate3d(46px, 0, 0);
+    filter: blur(4px);
+  }
+
+  65% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+  }
+}
+
+@keyframes dl-frag-base-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dl-streak-pass {
+  0% {
+    opacity: 0;
+    transform: translateX(-40%) skewX(-12deg);
+  }
+
+  35% {
+    opacity: 0.9;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(40%) skewX(-12deg);
+  }
+}
+
+@keyframes dl-spark-converge {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--dl-spark-x, 30px), var(--dl-spark-y, -30px), 0) scale(1.4);
+  }
+
+  55% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.2);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
 
-  .dl-logo,
-  .dl-logo::before,
-  .dl-logo::after {
+  .dl-logo__stage,
+  .dl-logo__stage::before,
+  .dl-logo__shimmer,
+  .dl-logo__frag,
+  .dl-logo__streak,
+  .dl-logo__spark {
     animation: none !important;
+  }
+
+  .dl-logo__frag,
+  .dl-logo__streak,
+  .dl-logo__spark {
+    opacity: 0 !important;
+  }
+
+  .dl-logo__base {
+    opacity: 1 !important;
   }
 }
 
-/* ── Login experience: aurora / mesh background + glass depth ─────────── */
+/* ══════════════════════════════════════════════════════════════════════
+   LOGIN EXPERIENCE — cinematic depth background + glass card
+   ══════════════════════════════════════════════════════════════════════ */
+
 .auth-scene {
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  background: #060a1a;
   background: linear-gradient(160deg, #060a1a 0%, #0b1230 45%, #0e1a3d 100%);
+  perspective: 1400px;
 }
 
 .auth-scene__mesh {
@@ -209,7 +411,7 @@
     radial-gradient(42% 46% at 82% 18%, rgba(99, 102, 241, 0.35), transparent 62%),
     radial-gradient(46% 50% at 50% 88%, rgba(45, 212, 191, 0.18), transparent 65%);
   filter: blur(30px) saturate(120%);
-  animation: dl-mesh-drift 22s ease-in-out infinite alternate;
+  animation: dl-mesh-drift 24s ease-in-out infinite alternate;
   will-change: transform;
 }
 
@@ -217,13 +419,28 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: repeating-linear-gradient(100deg,
-      rgba(255, 255, 255, 0.035) 0px,
-      rgba(255, 255, 255, 0.035) 1px,
-      transparent 1px,
-      transparent 90px);
+  background: repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.035) 0px, rgba(255, 255, 255, 0.035) 1px, transparent 1px, transparent 90px);
   mix-blend-mode: screen;
   opacity: 0.5;
+}
+
+.auth-scene__fog {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(60% 45% at 50% 100%, rgba(56, 189, 248, 0.14), transparent 70%);
+  animation: dl-fog-drift 18s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.auth-beam {
+  position: absolute;
+  z-index: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.5), transparent);
+  filter: blur(1px);
+  animation: dl-beam-drift 14s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .auth-orb {
@@ -235,6 +452,35 @@
   pointer-events: none;
 }
 
+.auth-shard {
+  position: absolute;
+  z-index: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.01));
+  backdrop-filter: blur(1px);
+  border-radius: 22%;
+  pointer-events: none;
+  animation: dl-shard-float 16s ease-in-out infinite;
+  will-change: transform;
+}
+
+.auth-particle {
+  position: absolute;
+  z-index: 0;
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(191, 219, 254, 0.75);
+  box-shadow: 0 0 6px 1px rgba(147, 197, 253, 0.55);
+  animation: dl-particle-drift linear infinite;
+  pointer-events: none;
+}
+
+.auth-parallax {
+  transform: translate3d(calc(var(--px, 0) * var(--depth, 1)), calc(var(--py, 0) * var(--depth, 1)), 0);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 @keyframes dl-mesh-drift {
   0% {
     transform: translate3d(0, 0, 0) scale(1);
@@ -242,6 +488,32 @@
 
   100% {
     transform: translate3d(-2%, 2%, 0) scale(1.06);
+  }
+}
+
+@keyframes dl-fog-drift {
+  0% {
+    opacity: 0.5;
+    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 0.8;
+    transform: translateY(-2%);
+  }
+}
+
+@keyframes dl-beam-drift {
+
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateX(-8%);
+  }
+
+  50% {
+    opacity: 0.8;
+    transform: translateX(8%);
   }
 }
 
@@ -269,21 +541,93 @@
   }
 }
 
+@keyframes dl-shard-float {
+
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--r, 12deg));
+  }
+
+  50% {
+    transform: translate3d(-10px, 14px, 0) rotate(calc(var(--r, 12deg) + 4deg));
+  }
+}
+
+@keyframes dl-particle-drift {
+  0% {
+    transform: translate3d(0, 10vh, 0);
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 0.9;
+  }
+
+  90% {
+    opacity: 0.6;
+  }
+
+  100% {
+    transform: translate3d(0, -10vh, 0);
+    opacity: 0;
+  }
+}
+
 .auth-card {
   position: relative;
   z-index: 1;
   backdrop-filter: blur(22px) saturate(140%);
   -webkit-backdrop-filter: blur(22px) saturate(140%);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.82));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.93), rgba(255, 255, 255, 0.84));
   border: 1px solid rgba(255, 255, 255, 0.6);
   box-shadow:
     0 30px 80px -20px rgba(2, 6, 23, 0.55),
     0 10px 30px -12px rgba(2, 6, 23, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transform: rotateX(calc(var(--tilt-y, 0) * 1deg)) rotateY(calc(var(--tilt-x, 0) * 1deg));
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease;
+  transform-style: preserve-3d;
+}
+
+.auth-card::before {
+  /* Border light that subtly follows the last-known cursor position */
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(calc(var(--tilt-x, 0) * 6deg + 120deg),
+      rgba(99, 102, 241, 0.55),
+      rgba(255, 255, 255, 0.05) 35%,
+      rgba(56, 189, 248, 0.45) 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.7;
+  pointer-events: none;
+  transition: background 0.35s ease;
 }
 
 .auth-input-wrap {
   position: relative;
+}
+
+.auth-input-wrap::after {
+  /* Animated focus border glow, drawn as a growing ring rather than a
+     hard outline so focus feels like it "expands" in. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 0.9rem;
+  box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+  transition: box-shadow 0.3s ease;
+  pointer-events: none;
+}
+
+.auth-input-wrap:focus-within::after {
+  box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.16);
 }
 
 .auth-input {
@@ -294,33 +638,117 @@
   padding: 0.85rem 0.9rem;
   font-size: 0.925rem;
   color: #0f172a;
-  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease;
 }
 
 .auth-input:focus {
   outline: none;
   border-color: rgba(79, 70, 229, 0.65);
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.97);
   box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18), 0 4px 18px -4px rgba(79, 70, 229, 0.35);
 }
 
+.auth-input.is-invalid {
+  animation: dl-input-shake 0.4s ease;
+  border-color: rgba(220, 38, 38, 0.6);
+}
+
+@keyframes dl-input-shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-4px);
+  }
+
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+/* ── Custom "Remember me" checkbox with a self-drawing tick ───────────── */
+.auth-check {
+  position: relative;
+  display: inline-flex;
+  height: 1.15rem;
+  width: 1.15rem;
+  flex-shrink: 0;
+  border-radius: 0.35rem;
+  border: 1.5px solid rgba(100, 116, 139, 0.45);
+  background: rgba(255, 255, 255, 0.7);
+  transition: background-color 180ms ease, border-color 180ms ease, transform 120ms ease;
+  cursor: pointer;
+}
+
+.auth-check.is-checked {
+  background: linear-gradient(135deg, #4f46e5, #1e3a8a);
+  border-color: #4338ca;
+}
+
+.auth-check:active {
+  transform: scale(0.9);
+}
+
+.auth-check svg {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+.auth-check path {
+  fill: none;
+  stroke: white;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 20;
+  stroke-dashoffset: 20;
+  transition: stroke-dashoffset 260ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.auth-check.is-checked path {
+  stroke-dashoffset: 0;
+}
+
+/* ── Eye icon crossfade ────────────────────────────────────────────────── */
+.auth-eye-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.auth-eye-icon.is-hidden {
+  opacity: 0;
+  transform: rotate(-25deg) scale(0.6);
+  pointer-events: none;
+}
+
+/* ── Premium button ────────────────────────────────────────────────────── */
 .auth-btn {
   position: relative;
   overflow: hidden;
   border-radius: 0.9rem;
   background: linear-gradient(135deg, #4f46e5 0%, #4338ca 55%, #1e3a8a 100%);
+  background-size: 180% 180%;
   box-shadow: 0 12px 28px -10px rgba(67, 56, 202, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.25);
   transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease, filter 180ms ease;
+  animation: dl-btn-gradient 6s ease infinite;
 }
 
 .auth-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 18px 38px -12px rgba(67, 56, 202, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  filter: brightness(1.05);
+  filter: brightness(1.06);
 }
 
 .auth-btn:active:not(:disabled) {
-  transform: translateY(0) scale(0.985);
+  transform: translateY(0) scale(0.97);
 }
 
 .auth-btn::after {
@@ -337,6 +765,23 @@
 .auth-btn:hover:not(:disabled)::after {
   opacity: 1;
   animation: dl-logo-sweep 1.4s ease-in-out 1;
+}
+
+.auth-btn.is-success {
+  animation: none;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+}
+
+@keyframes dl-btn-gradient {
+
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
 }
 
 @keyframes dl-rise-in {
@@ -383,14 +828,31 @@
 @media (prefers-reduced-motion: reduce) {
 
   .auth-scene__mesh,
+  .auth-scene__fog,
+  .auth-beam,
   .auth-orb,
-  .auth-btn::after {
+  .auth-shard,
+  .auth-particle,
+  .auth-btn,
+  .auth-btn::after,
+  .auth-card {
     animation: none !important;
+    transition: none !important;
+  }
+
+  .auth-card {
+    transform: none !important;
   }
 
   .dl-stagger>* {
     opacity: 1;
     animation: none !important;
+    transform: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .auth-parallax {
     transform: none !important;
   }
 }

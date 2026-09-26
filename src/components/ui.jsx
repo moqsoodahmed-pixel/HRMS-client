@@ -7,23 +7,66 @@ import { humanise, formatFileSize } from '../lib/format';
 /* Animated brand logo                                                 */
 /* ------------------------------------------------------------------ */
 
+const LOGO_SRC = '/dutylaunch-logo.webp';
+
+// Fixed converge offsets for the pre-assembly "sparks" (see index.css'
+// dl-spark-converge keyframe) — plain numbers, not randomized on every
+// render, so the animation is deterministic and never causes a reflow.
+const SPARK_POSITIONS = [
+  { top: '10%', left: '6%', x: '34px', y: '-28px', size: 5, delay: 0 },
+  { top: '70%', left: '10%', x: '30px', y: '24px', size: 4, delay: 90 },
+  { top: '15%', left: '90%', x: '-32px', y: '-24px', size: 4, delay: 160 },
+  { top: '80%', left: '86%', x: '-28px', y: '26px', size: 6, delay: 60 },
+  { top: '45%', left: '2%', x: '38px', y: '0px', size: 3, delay: 220 },
+  { top: '40%', left: '96%', x: '-36px', y: '4px', size: 3, delay: 130 },
+];
+
 /**
- * The one place the DutyLaunch logo file is referenced. Renders the
- * ORIGINAL /dutylaunch-logo.webp completely unmodified — same pixels,
- * same proportions, same colors — wrapped in a `.dl-logo` shell (see
- * index.css) that adds a masked light-sweep, a slow ambient glow, and a
- * few-pixel float, all via GPU-friendly transform/opacity keyframes.
- * Every screen that shows the logo (login, sidebar, and anything added
- * later) should render this instead of a raw <img>, so the animation —
- * and any future logo update — only needs to happen in one spot.
+ * The one place the DutyLaunch logo file is referenced. Every screen
+ * that shows the logo (login, sidebar, and anything added later) should
+ * render this instead of a raw <img>, so the animation — and any future
+ * logo update — only needs to happen in one spot.
+ *
+ * The ORIGINAL /dutylaunch-logo.webp is never redrawn, re-vectorized, or
+ * distorted: `.dl-logo__base` is that exact unmodified file and is the
+ * only thing left visible once the animation settles (or immediately,
+ * under `prefers-reduced-motion` or when `reveal` is false). The
+ * one-time "assembly" effect on mount is produced by layering a few
+ * `clip-path` crops of that SAME image file (icon / "Duty" / "Launch")
+ * that slide into alignment with the base and then fade out — see the
+ * `dl-logo--reveal` rules in index.css for the exact timing.
  */
-export function AnimatedLogo({ className = 'h-10', alt = 'DutyLaunch' }) {
+export function AnimatedLogo({ className = 'h-10', alt = 'DutyLaunch', reveal = true }) {
   return (
-    <span
-      className={`dl-logo ${className}`}
-      style={{ '--dl-logo-mask': 'url(/dutylaunch-logo.webp)' }}
-    >
-      <img src="/dutylaunch-logo.webp" alt={alt} className={`${className} w-auto object-contain`} />
+    <span className={`dl-logo ${className}`} style={{ '--dl-logo-mask': `url(${LOGO_SRC})` }}>
+      <span className={`dl-logo__stage ${reveal ? 'dl-logo--reveal' : ''}`}>
+        {reveal && SPARK_POSITIONS.map((s, i) => (
+          <span
+            key={i}
+            className="dl-logo__spark"
+            style={{
+              top: s.top,
+              left: s.left,
+              width: s.size,
+              height: s.size,
+              animationDelay: `${s.delay}ms`,
+              '--dl-spark-x': s.x,
+              '--dl-spark-y': s.y,
+            }}
+          />
+        ))}
+        {reveal && <img src={LOGO_SRC} alt="" aria-hidden="true" className={`dl-logo__frag dl-logo__frag--icon ${className} w-auto object-contain`} />}
+        {reveal && <img src={LOGO_SRC} alt="" aria-hidden="true" className={`dl-logo__frag dl-logo__frag--text1 ${className} w-auto object-contain`} />}
+        {reveal && <img src={LOGO_SRC} alt="" aria-hidden="true" className={`dl-logo__frag dl-logo__frag--text2 ${className} w-auto object-contain`} />}
+        {reveal && <span className="dl-logo__streak" />}
+        <img
+          src={LOGO_SRC}
+          alt={alt}
+          className={`dl-logo__base ${className} w-auto object-contain`}
+          style={reveal ? undefined : { opacity: 1 }}
+        />
+        <span className="dl-logo__shimmer" />
+      </span>
     </span>
   );
 }
