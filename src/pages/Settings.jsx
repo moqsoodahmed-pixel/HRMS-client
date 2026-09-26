@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Building2, Clock, CalendarDays, Wallet, LogOut, ShieldCheck, Save, ExternalLink, Lock, Send,
-  Smartphone, MapPin, Plane, X,
+  Smartphone, MapPin, Plane, X, Unlock, ShieldAlert,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { settingsAPI, leaveAPI, payrollAPI, remoteWorkAPI } from '../api/axios';
+import { settingsAPI, leaveAPI, payrollAPI, remoteWorkAPI, accountAccessAPI } from '../api/axios';
 import { PageHeader, FormField, StatusBadge, LoadingBlock, ErrorState, SearchInput, DataTable, EmptyState } from '../components/ui';
-import { errorMessage, formatDate } from '../lib/format';
+import { errorMessage, formatDate, formatDateTime } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
 import { getCurrentLocation } from '../lib/geolocation';
 import { Link } from 'react-router-dom';
@@ -202,7 +202,7 @@ export default function Settings() {
         <SettingsSection
           icon={Smartphone}
           title="Device & Location Access"
-          description="Restrict sign-in to desktop/laptop devices and/or to within a radius of the office. CEO, CTO and Project Head are always exempt from both."
+          description="Restrict sign-in to desktop/laptop devices and/or to within a radius of the office. CEO, CTO and Project Head are always exempt from both. Desktops/laptops have no GPS — their location is Wi-Fi/IP based and naturally less precise, so the radius check now automatically allows for that device's own reported accuracy, which is what was causing some desktops in the office to be denied while others passed."
         >
           <div className="mb-4 flex flex-wrap items-center gap-6">
             <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
@@ -260,6 +260,7 @@ export default function Settings() {
         </SettingsSection>
 
         <RemoteWorkAccessSection />
+        <AccountAccessSection />
       </div>
     </div>
   );
@@ -509,6 +510,137 @@ function RemoteWorkAccessSection() {
         error={listQuery.error}
         onRetry={listQuery.refetch}
         empty={<EmptyState icon={Plane} title="No remote work exceptions" description="Grant one above when an employee needs to sign in away from the office." />}
+      />
+    </SettingsSection>
+  );
+}
+
+/**
+ * Manual account lock/unlock — see server/controllers/accountAccessController.js.
+ * Same grantor set as Temporary Remote Work Access (HR_ADMIN, PROJECT_HEAD,
+ * elevated), so it reuses the identical role check.
+ */
+function AccountAccessSection() {
+  const { isElevated, hasRole } = useAuth();
+  const canManage = isElevated || hasRole('HR_ADMIN', 'PROJECT_HEAD');
+  if (!canManage) return null;
+
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [reason, setReason] = useState('');
+
+  const lockedQuery = useQuery({ queryKey: ['account-access', 'locked'], queryFn: () => accountAccessAPI.listLocked() });
+  const lockedAccounts = lockedQuery.data?.data?.data || [];
+
+  const searchQuery = useQuery({
+    queryKey: ['account-access', 'search', search],
+    queryFn: () => accountAccessAPI.search({ search }),
+    enabled: search.length > 1 && !selected,
+  });
+  const searchOptions = searchQuery.data?.data?.data || [];
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['account-access', 'locked'] });
+
+  const lock = useMutation({
+    mutationFn: ({ userId, reason }) => accountAccessAPI.lock(userId, reason),
+    onSuccess: () => {
+      toast.success('Account locked');
+      invalidate();
+      setSelected(null);
+      setSearch('');
+      setReason('');
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const unlock = useMutation({
+    mutationFn: (userId) => accountAccessAPI.unlock(userId),
+    onSuccess: () => {
+      toast.success('Account unlocked');
+      invalidate();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const submitLock = (e) => {
+    e.preventDefault();
+    if (!selected) {
+      toast.error('Search for and select the person whose account you want to lock.');
+      return;
+    }
+    lock.mutate({ userId: selected.user._id, reason: reason.trim() || undefined });
+  };
+
+  return (
+    <SettingsSection
+      icon={ShieldAlert}
+      title="Account Access"
+      description="Unlock an account that's been temporarily locked (5 failed sign-in attempts), or deliberately lock one yourself — e.g. a lost device or an account under review."
+    >
+      <form onSubmit={submitLock} className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative sm:col-span-2 lg:col-span-2">
+          <FormField label="Lock an account" required hint="Company-wide search — not limited to your own team.">
+            <SearchInput
+              value={selected ? selected.fullName : search}
+              onChange={(v) => { setSearch(v); setSelected(null); }}
+              placeholder="Search by name or employee code…"
+            />
+          </FormField>
+          {search.length > 1 && !selected && searchOptions.length > 0 && (
+            <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+              {searchOptions.map((emp) => (
+                <li key={emp._id}>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                    onClick={() => { setSelected(emp); setSearch(emp.fullName); }}
+                  >
+                    {emp.fullName} <span className="text-xs text-gray-400">{emp.employeeCode} · {emp.user?.email}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <FormField label="Reason" hint="Optional">
+          <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Reported device lost" />
+        </FormField>
+        <div className="flex items-end">
+          <button type="submit" className="btn-primary" disabled={lock.isPending || !selected}>
+            {lock.isPending ? 'Locking…' : 'Lock account'}
+          </button>
+        </div>
+      </form>
+
+      <DataTable
+        columns={[
+          {
+            key: 'employee', header: 'Employee',
+            render: (u) => <span>{u.employee?.fullName || u.email} <span className="text-xs text-gray-400">{u.employee?.employeeCode}</span></span>,
+          },
+          { key: 'email', header: 'Email', render: (u) => <span className="text-gray-600">{u.email}</span> },
+          {
+            key: 'reason', header: 'Locked because',
+            render: (u) => u.manuallyLocked
+              ? <span>Manually locked{u.lockedBy?.email ? ` by ${u.lockedBy.email}` : ''}{u.lockReason ? ` — ${u.lockReason}` : ''}</span>
+              : <span className="text-gray-600">5 failed sign-in attempts (auto)</span>,
+          },
+          { key: 'lockedUntil', header: 'Locked until', render: (u) => u.manuallyLocked ? 'Until unlocked' : formatDateTime(u.lockedUntil) },
+          {
+            key: 'actions', header: '',
+            render: (u) => (
+              <button type="button" className="btn-ghost inline-flex items-center gap-1.5" title="Unlock" onClick={() => unlock.mutate(u._id)} disabled={unlock.isPending}>
+                <Unlock className="h-4 w-4" /> Unlock
+              </button>
+            ),
+          },
+        ]}
+        rows={lockedAccounts}
+        isLoading={lockedQuery.isLoading}
+        error={lockedQuery.error}
+        onRetry={lockedQuery.refetch}
+        empty={<EmptyState icon={Unlock} title="No locked accounts" description="Everyone can currently sign in normally." />}
       />
     </SettingsSection>
   );

@@ -328,6 +328,14 @@ export const remoteWorkAPI = {
   searchEmployees: (params) => api.get('/remote-work-approvals/employees', { params: clean(params) }),
 };
 
+/** Manual account lock/unlock — see server/controllers/accountAccessController.js. */
+export const accountAccessAPI = {
+  listLocked: () => api.get('/account-access/locked'),
+  search: (params) => api.get('/account-access/search', { params: clean(params) }),
+  lock: (userId, reason) => api.post(`/account-access/${userId}/lock`, reason ? { reason } : {}),
+  unlock: (userId) => api.post(`/account-access/${userId}/unlock`),
+};
+
 export const offboardingAPI = {
   overview: (params) => api.get('/offboarding', { params: clean(params) }),
   forEmployee: (employeeId) => api.get(`/offboarding/${employeeId}`),
