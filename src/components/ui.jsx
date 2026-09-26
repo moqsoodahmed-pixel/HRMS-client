@@ -12,7 +12,16 @@ import { humanise, formatFileSize } from '../lib/format';
 // produced it. Every pixel of the shield and wordmark is untouched; nothing
 // is redrawn, recolored, re-vectorized or resized. This is the single
 // source every <AnimatedLogo /> instance renders from.
+//
+// This file MUST live at HRMS-client/public/dutylaunch-logo-transparent.webp
+// — same folder as the existing dutylaunch-logo.webp, filename exact and
+// case-sensitive. If it 404s for any reason (not deployed yet, wrong
+// folder, a stale cache), every <img> below falls back to the original
+// opaque /dutylaunch-logo.webp automatically (see LOGO_FALLBACK_SRC and
+// the onError handler) rather than rendering nothing — the white backing
+// briefly reappears in that case, but the logo itself is never missing.
 const LOGO_SRC = '/dutylaunch-logo-transparent.webp';
+const LOGO_FALLBACK_SRC = '/dutylaunch-logo.webp';
 
 // One crop per "beat" of the assembly sequence, in the order they lock
 // into place: shield-less "D", then the rest of "Duty", then "L", then
@@ -73,6 +82,13 @@ const SHARDS = Array.from({ length: SHARD_COUNT }, (_, i) => {
  * all. `prefers-reduced-motion` does the same automatically.
  */
 export function AnimatedLogo({ className = 'h-10', alt = 'DutyLaunch', reveal = true }) {
+  // Starts optimistic (the transparent asset); drops to the original
+  // opaque file the first time any copy of the image fails to load, so a
+  // missing/not-yet-deployed transparent asset degrades to "logo with its
+  // old white backing" instead of "no logo at all".
+  const [src, setSrc] = useState(LOGO_SRC);
+  const onImgError = () => setSrc((current) => (current === LOGO_SRC ? LOGO_FALLBACK_SRC : current));
+
   return (
     // A single accessible name lives on this wrapper (role="img") because
     // the actual pixels underneath are split across several decorative
@@ -80,7 +96,7 @@ export function AnimatedLogo({ className = 'h-10', alt = 'DutyLaunch', reveal = 
     // should always read as one thing, regardless of animation state.
     <span className={`dl-logo ${reveal ? 'dl-logo--loop' : 'dl-logo--static'} ${className}`} role="img" aria-label={alt}>
       <span className="dl-logo__stage">
-        <img src={LOGO_SRC} alt="" aria-hidden="true" className={`dl-logo__sizer ${className} w-auto object-contain`} />
+        <img src={src} onError={onImgError} alt="" aria-hidden="true" className={`dl-logo__sizer ${className} w-auto object-contain`} />
 
         {reveal && SPARK_POSITIONS.map((s, i) => (
           <span key={i} className="dl-logo__spark" style={{ top: s.top, left: s.left, width: s.size, height: s.size }} />
@@ -89,7 +105,8 @@ export function AnimatedLogo({ className = 'h-10', alt = 'DutyLaunch', reveal = 
         {LOGO_SEGMENTS.map((seg) => (
           <img
             key={seg}
-            src={LOGO_SRC}
+            src={src}
+            onError={onImgError}
             alt=""
             aria-hidden="true"
             className={`dl-logo__seg dl-logo__seg--${seg} ${className} w-auto object-contain`}
