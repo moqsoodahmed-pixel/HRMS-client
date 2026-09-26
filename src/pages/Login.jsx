@@ -470,18 +470,40 @@ export default function Login() {
   );
 }
 
-function ForgotPasswordModal({ open, onClose, defaultEmail }) {
-  const [email, setEmail] = useState(defaultEmail || '');
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+// Matches the rule the server enforces (see HRMS-server/controllers/authController.js
+// resetSchema) and the wording already used on the Settings page's security notes.
+const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/;
+const PASSWORD_HINT = 'Min. 8 characters, with uppercase, lowercase, a number and a special character.';
 
-  const submit = async (e) => {
+function ForgotPasswordModal({ open, onClose, defaultEmail }) {
+  // 'email' → enter address and request a code; 'otp' → enter the 6-digit
+  // code plus a new password; 'done' → confirmation.
+  const [step, setStep] = useState('email');
+  const [email, setEmail] = useState(defaultEmail || '');
+  const [otp, setOtp] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [fieldError, setFieldError] = useState('');
+
+  const reset = () => {
+    setStep('email');
+    setOtp('');
+    setPassword('');
+    setConfirmPassword('');
+    setShowPassword(false);
+    setFieldError('');
+  };
+  const close = () => { reset(); onClose(); };
+
+  const requestCode = async (e) => {
     e.preventDefault();
     if (sending) return;
     setSending(true);
     try {
       await authAPI.forgotPassword(email.trim());
-      setSent(true);
+      setStep('otp');
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -489,25 +511,53 @@ function ForgotPasswordModal({ open, onClose, defaultEmail }) {
     }
   };
 
-  const close = () => { setSent(false); onClose(); };
+  const submitReset = async (e) => {
+    e.preventDefault();
+    if (sending) return;
+    setFieldError('');
+    if (!/^\d{6}$/.test(otp.trim())) {
+      setFieldError('Enter the 6-digit code from your email');
+      return;
+    }
+    if (!PASSWORD_RULE.test(password)) {
+      setFieldError(PASSWORD_HINT);
+      return;
+    }
+    if (password !== confirmPassword) {
+      setFieldError('Passwords do not match');
+      return;
+    }
+    setSending(true);
+    try {
+      await authAPI.resetPassword({ email: email.trim(), otp: otp.trim(), password });
+      setStep('done');
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const resendCode = async () => {
+    if (sending) return;
+    setSending(true);
+    try {
+      await authAPI.forgotPassword(email.trim());
+      toast.success('A new code has been sent');
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <Modal open={open} onClose={close} title="Reset your password" size="sm">
       <div className="p-5">
-        {sent ? (
-          <>
+        {step === 'email' && (
+          <form onSubmit={requestCode} className="space-y-4">
             <p className="text-sm text-gray-600">
-              If an account exists for <span className="font-medium">{email}</span>, a reset link has been sent to
-              that address. The link is valid for one hour.
-            </p>
-            <div className="mt-6 flex justify-end">
-              <button type="button" className="btn-primary" onClick={close}>Done</button>
-            </div>
-          </>
-        ) : (
-          <form onSubmit={submit} className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Enter your work email address and we will send you a link to set a new password.
+              Enter your work email address and we will send you a 6-digit code to reset your password.
             </p>
             <FormField label="Email address" required>
               <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -515,10 +565,82 @@ function ForgotPasswordModal({ open, onClose, defaultEmail }) {
             <div className="flex justify-end gap-3 pt-2">
               <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
               <button type="submit" className="btn-primary" disabled={sending}>
-                {sending ? 'Sending…' : 'Send reset link'}
+                {sending ? 'Sending…' : 'Send code'}
               </button>
             </div>
           </form>
+        )}
+
+        {step === 'otp' && (
+          <form onSubmit={submitReset} className="space-y-4">
+            <p className="text-sm text-gray-600">
+              If an account exists for <span className="font-medium">{email}</span>, a 6-digit code has been sent to
+              that address. It expires in 10 minutes.
+            </p>
+            <FormField label="Reset code" required>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                className="input tracking-[0.3em]"
+                placeholder="000000"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                required
+              />
+            </FormField>
+            <FormField label="New password" required hint={PASSWORD_HINT}>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="input pr-10"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                  onClick={() => setShowPassword((v) => !v)}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </FormField>
+            <FormField label="Confirm new password" required error={fieldError}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="input"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </FormField>
+            <div className="flex items-center justify-between pt-2">
+              <button type="button" className="text-xs font-medium text-indigo-600 hover:text-indigo-700" onClick={resendCode} disabled={sending}>
+                Resend code
+              </button>
+              <div className="flex gap-3">
+                <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={sending}>
+                  {sending ? 'Resetting…' : 'Reset password'}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {step === 'done' && (
+          <>
+            <p className="text-sm text-gray-600">
+              Your password has been reset. You can now sign in with your new password.
+            </p>
+            <div className="mt-6 flex justify-end">
+              <button type="button" className="btn-primary" onClick={close}>Done</button>
+            </div>
+          </>
         )}
       </div>
     </Modal>
