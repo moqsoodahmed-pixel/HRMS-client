@@ -126,10 +126,17 @@ function AppRoutes() {
   );
 }
 
+// Matches vite.config.js's `base` at runtime (e.g. '/' locally, '/hrms/' in
+// production — see that file's doc comment for the full "true path"
+// deployment reasoning). import.meta.env.BASE_URL always ends with a
+// trailing slash; React Router's `basename` expects none (an empty string
+// for the root case is equivalent to "no prefix"), hence the strip.
+const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '');
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename={routerBasename}>
         <AuthProvider>
           <AppRoutes />
           <Toaster

@@ -20,8 +20,17 @@ import { humanise, formatFileSize } from '../lib/format';
 // opaque /dutylaunch-logo.webp automatically (see LOGO_FALLBACK_SRC and
 // the onError handler) rather than rendering nothing — the white backing
 // briefly reappears in that case, but the logo itself is never missing.
-const LOGO_SRC = '/dutylaunch-logo-transparent.webp';
-const LOGO_FALLBACK_SRC = '/dutylaunch-logo.webp';
+//
+// Prefixed with import.meta.env.BASE_URL (Vite's own configured `base`,
+// e.g. '/' locally or '/hrms/' in production — see vite.config.js) rather
+// than a bare leading-slash string: a hardcoded '/dutylaunch-logo.webp'
+// would resolve to the domain ROOT regardless of where this app is
+// actually mounted, which 404s once the app is served under a path prefix
+// (e.g. dutylaunch.com/hrms/) instead of a domain's root. BASE_URL always
+// matches wherever `public/` assets are actually deployed, so this needs no
+// changes if the mount path ever changes again.
+const LOGO_SRC = `${import.meta.env.BASE_URL}dutylaunch-logo-transparent.webp`;
+const LOGO_FALLBACK_SRC = `${import.meta.env.BASE_URL}dutylaunch-logo.webp`;
 
 // One crop per "beat" of the assembly sequence, in the order they lock
 // into place: shield-less "D", then the rest of "Duty", then "L", then
