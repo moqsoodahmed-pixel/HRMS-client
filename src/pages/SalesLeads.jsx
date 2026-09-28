@@ -8,6 +8,8 @@ import { useAuth } from '../context/AuthContext';
 import { leadsAPI, employeeAPI } from '../api/axios';
 import { PageHeader, Spinner, EmptyState, LoadingBlock } from '../components/ui';
 import { errorMessage } from '../lib/format';
+import MiniCalendar from '../components/MiniCalendar';
+import BDWorkspace from './BDWorkspace';
 
 const STATUS_COLORS = {
   NEW: 'bg-blue-100 text-blue-700',
@@ -704,146 +706,6 @@ function LeadHistoryModal({ leadId, onClose }) {
   );
 }
 
-// ── Mini Calendar Component ──────────────────────────────────────────────────
-function MiniCalendar({ selectedDate, onSelectDate, onClose }) {
-  const [viewDate, setViewDate] = useState(() => {
-    if (selectedDate) {
-      const parts = selectedDate.split('-');
-      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
-    }
-    return new Date();
-  });
-
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  const prevMonth = (e) => {
-    e.stopPropagation();
-    setViewDate(new Date(year, month - 1, 1));
-  };
-
-  const nextMonth = (e) => {
-    e.stopPropagation();
-    setViewDate(new Date(year, month + 1, 1));
-  };
-
-  // Calendar math
-  const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0 = Sun
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-  const days = [];
-  for (let i = 0; i < firstDayOfWeek; i++) {
-    days.push(null);
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    days.push({ day: d, dateStr: dStr });
-  }
-
-  return (
-    <div
-      className="absolute top-full left-0 sm:right-0 sm:left-auto mt-2 z-50 w-64 rounded-xl border border-gray-200 bg-white p-3 shadow-xl ring-1 ring-black/5"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <button
-          type="button"
-          onClick={prevMonth}
-          className="p-1 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-          title="Previous month"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <span className="text-xs font-semibold text-gray-800">
-          {monthNames[month]} {year}
-        </span>
-        <button
-          type="button"
-          onClick={nextMonth}
-          className="p-1 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-          title="Next month"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Weekday headers */}
-      <div className="grid grid-cols-7 gap-1 text-center mb-1">
-        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((w) => (
-          <span key={w} className="text-[11px] font-medium text-gray-400">
-            {w}
-          </span>
-        ))}
-      </div>
-
-      {/* Days grid */}
-      <div className="grid grid-cols-7 gap-1 text-center">
-        {days.map((item, idx) => {
-          if (!item) {
-            return <div key={`empty-${idx}`} className="h-7 w-7" />;
-          }
-          const isSelected = selectedDate === item.dateStr;
-          const isToday = todayStr === item.dateStr;
-
-          return (
-            <button
-              key={item.dateStr}
-              type="button"
-              onClick={() => {
-                onSelectDate(item.dateStr);
-                onClose();
-              }}
-              className={`h-7 w-7 rounded-full text-xs font-medium flex items-center justify-center transition-all ${isSelected
-                ? 'bg-primary-600 text-white font-semibold shadow-sm'
-                : isToday
-                  ? 'border border-primary-500 text-primary-600 hover:bg-primary-50'
-                  : 'text-gray-700 hover:bg-gray-100'
-                }`}
-            >
-              {item.day}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Footer / Quick actions */}
-      <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
-        <button
-          type="button"
-          onClick={() => {
-            onSelectDate(todayStr);
-            onClose();
-          }}
-          className="text-primary-600 font-medium hover:underline"
-        >
-          Today
-        </button>
-        {selectedDate && (
-          <button
-            type="button"
-            onClick={() => {
-              onSelectDate('');
-              onClose();
-            }}
-            className="text-gray-500 hover:text-red-600 hover:underline"
-          >
-            Clear Date
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function SalesLeads() {
   const { user, employee, isElevated } = useAuth();
@@ -858,6 +720,16 @@ export default function SalesLeads() {
   const salesDept = (employee?.department || '').toLowerCase();
   const isSalesEmployee = role === 'EMPLOYEE' && (salesDept === 'sales' || salesDept.includes('sales') || salesDept.includes('business development'));
   const canSeeRowNumber = isElevated || role === 'HR_ADMIN' || role === 'PROJECT_HEAD' || isSalesEmployee;
+
+  // Personalization for the individual-contributor workspace (BDWorkspace)
+  // below — same "who am I" pattern EmployeeDashboard uses elsewhere in the
+  // app (Dashboard.jsx), and the same department string already used just
+  // above to decide row-number visibility, just also used to pick the right
+  // label: an employee placed in the "Business Development" department (see
+  // constants.js DEPARTMENTS) gets a workspace labelled for that role rather
+  // than generically "Sales", and vice versa.
+  const displayName = employee?.fullName || user?.email?.split('@')[0] || 'there';
+  const deptLabel = salesDept.includes('business development') ? 'Business Development' : 'Sales';
 
   // Reveal state — only one lead at a time, 20s timer.
   //
@@ -1043,6 +915,16 @@ export default function SalesLeads() {
 
   const handleSearch = (e) => { setSearch(e.target.value); setPage(1); };
 
+  // Plain-value variants of the same filter setters above, for BDWorkspace
+  // (the individual-contributor view below) — it calls these directly with
+  // a value rather than a raw <select> change event, since its KPI cards
+  // and task-panel rows also need to set these same filters programmatically
+  // (e.g. clicking the "Interested" KPI card should filter the list to
+  // INTERESTED leads exactly like picking it from the status dropdown does).
+  const handleStatusFilterChange = (value) => { setStatusFilter(value); setPage(1); };
+  const handleLeadDateFilterChange = (value) => { setLeadDateFilter(value); setPage(1); };
+  const handleCustomDateChange = (value) => { setCustomDate(value); setPage(1); };
+
   // Permanently removes every lead imported in one batch — the way to
   // clear out test/accidental uploads (e.g. leads imported while testing,
   // or before duplicate/state filtering was fixed) so a re-upload of the
@@ -1101,65 +983,43 @@ export default function SalesLeads() {
 
   return (
     <div>
-      <PageHeader
-        title="Sales Leads"
-        subtitle={isMgmt ? `Manage and distribute leads across the sales team` : `Your assigned leads`}
-        actions={
-          <div className="flex gap-2">
-            {isMgmt && (
-              <>
-                <button
-                  onClick={() => setActiveTab('leads')}
-                  className={`btn-secondary flex items-center gap-2 ${activeTab === 'leads' ? 'bg-primary-50 text-primary-700' : ''}`}
-                >
-                  <Filter className="h-4 w-4" /> Leads
-                </button>
-                <button
-                  onClick={() => setActiveTab('stats')}
-                  className={`btn-secondary flex items-center gap-2 ${activeTab === 'stats' ? 'bg-primary-50 text-primary-700' : ''}`}
-                >
-                  <BarChart3 className="h-4 w-4" /> Dashboard
-                </button>
-              </>
-            )}
-            {/*
-              Self-service "New Leads" tab — a highlighted shortcut to just-
-              assigned, unworked leads (status NEW), separate from the
-              default view so nothing already in progress (CONTACTED,
-              INTERESTED, etc.) gets hidden by default. Clicking either
-              button just sets the existing status filter, so it stays in
-              sync with the dropdown below (picking "New" there highlights
-              this tab too, and vice versa).
-            */}
-            {!isMgmt && (
-              <>
-                <button
-                  onClick={() => { setStatusFilter(''); setPage(1); }}
-                  className={`btn-secondary flex items-center gap-2 ${statusFilter === '' ? 'bg-primary-50 text-primary-700' : ''}`}
-                >
-                  All Leads
-                </button>
-                <button
-                  onClick={() => { setStatusFilter('NEW'); setPage(1); }}
-                  className={`btn-secondary flex items-center gap-2 ${statusFilter === 'NEW' ? 'bg-primary-50 text-primary-700' : ''}`}
-                >
-                  New Leads
-                  {newLeadsCount > 0 && (
-                    <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-primary-600 px-1.5 py-0.5 text-xs font-semibold text-white">
-                      {newLeadsCount}
-                    </span>
-                  )}
-                </button>
-              </>
-            )}
-          </div>
-        }
-      />
+      {/*
+        Management (CEO/Project Head/HR/Sales Team Lead/Director) keeps the
+        existing dense operational header — upload, batch, rebalance and
+        bulk-assign all live below it, unchanged. The individual-contributor
+        view (EMPLOYEE — a Business Development or Sales rep) gets NO
+        generic page header here at all: BDWorkspace below renders its own
+        personalized welcome banner as the very first thing on the page
+        instead, so there's no redundant "Sales Leads" title sitting above
+        a page that no longer looks or behaves like a plain sales list.
+      */}
+      {isMgmt && (
+        <PageHeader
+          title="Lead Pipeline"
+          subtitle="Manage and distribute leads across the sales team"
+          actions={
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveTab('leads')}
+                className={`btn-secondary flex items-center gap-2 ${activeTab === 'leads' ? 'bg-primary-50 text-primary-700' : ''}`}
+              >
+                <Filter className="h-4 w-4" /> Leads
+              </button>
+              <button
+                onClick={() => setActiveTab('stats')}
+                className={`btn-secondary flex items-center gap-2 ${activeTab === 'stats' ? 'bg-primary-50 text-primary-700' : ''}`}
+              >
+                <BarChart3 className="h-4 w-4" /> Dashboard
+              </button>
+            </div>
+          }
+        />
+      )}
 
       {canUpload && <UploadSection onUploaded={() => { fetchLeads(); fetchBatches(); }} />}
       {isMgmt && activeTab === 'stats' && <StatsDashboard />}
 
-      {(activeTab === 'leads' || !isMgmt) && (
+      {isMgmt && activeTab === 'leads' && (
         <>
           {/* Filters */}
           <div className="card mb-4 flex flex-wrap gap-3 p-3">
@@ -1457,6 +1317,48 @@ export default function SalesLeads() {
             )}
           </div>
         </>
+      )}
+
+      {/*
+        Individual-contributor view — a Business Development or Sales
+        Executive (role EMPLOYEE). Everything it needs (the paginated leads
+        list, filters, reveal-contact flow, "New Leads" count) is the exact
+        same state and API calls already wired up above for the management
+        table; BDWorkspace only owns its own presentation plus the extra
+        read-only "insights" calls (per-status counts, follow-up/first-
+        contact lists, recent activity) it needs for the KPI/funnel/task
+        sections — see BDWorkspace.jsx for the full data-honesty note on
+        what is and isn't shown.
+      */}
+      {!isMgmt && (
+        <BDWorkspace
+          displayName={displayName}
+          deptLabel={deptLabel}
+          leads={leads}
+          total={total}
+          page={page}
+          totalPages={totalPages}
+          loading={loading}
+          listError={listError}
+          LIMIT={LIMIT}
+          search={search}
+          onSearchChange={handleSearch}
+          statusFilter={statusFilter}
+          onStatusFilterChange={handleStatusFilterChange}
+          leadDateFilter={leadDateFilter}
+          onLeadDateFilterChange={handleLeadDateFilterChange}
+          customDate={customDate}
+          onCustomDateChange={handleCustomDateChange}
+          showCalendar={showCalendar}
+          setShowCalendar={setShowCalendar}
+          calendarRef={calendarRef}
+          onPageChange={setPage}
+          onRefresh={fetchLeads}
+          revealed={revealed}
+          onReveal={handleReveal}
+          onClearReveal={clearReveal}
+          newLeadsCount={newLeadsCount}
+        />
       )}
 
       {statusModal && (
