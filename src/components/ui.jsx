@@ -32,6 +32,24 @@ import { humanise, formatFileSize } from '../lib/format';
 const LOGO_SRC = `${import.meta.env.BASE_URL}dutylaunch-logo-transparent.webp`;
 const LOGO_FALLBACK_SRC = `${import.meta.env.BASE_URL}dutylaunch-logo.webp`;
 
+// Pre-rendered, pre-baked loop of the exact same "assemble -> hold ->
+// shatter -> restart" sequence the dl-seg-*/dl-spark-beats/dl-shatter-piece
+// keyframes below still define (captured frame-by-frame from that live CSS
+// animation itself, so it's pixel-matched to it, then encoded as a single
+// looping GIF89a — see the capture script this shipped alongside).
+//
+// This exists because that live version — 5 cropped <img> copies + 10
+// spark + 12 shard elements, each animating transform/opacity/filter
+// every frame — is exactly the kind of per-frame work weaker/low-power
+// devices drop frames on, which is what was reported as "laggy" even
+// with the perfTier.js tiering already in place. A GIF has none of that
+// per-frame cost: the browser's image decoder plays it, identical cost
+// on every device, and it loops forever on its own (no CSS/JS driving
+// it), which is what actually fixes the lag rather than trimming the
+// live animation further. Same BASE_URL-prefixing rationale as above —
+// must live at HRMS-client/public/dutylaunch-logo-animated.gif.
+const LOGO_GIF_SRC = `${import.meta.env.BASE_URL}dutylaunch-logo-animated.gif`;
+
 // One crop per "beat" of the assembly sequence, in the order they lock
 // into place: shield-less "D", then the rest of "Duty", then "L", then
 // the rest of "Launch", then the shield icon (see index.css' dl-seg-*
@@ -101,6 +119,26 @@ export function AnimatedLogo({ className = 'h-10', alt = 'DutyLaunch', reveal = 
   // old white backing" instead of "no logo at all".
   const [src, setSrc] = useState(LOGO_SRC);
   const onImgError = () => setSrc((current) => (current === LOGO_SRC ? LOGO_FALLBACK_SRC : current));
+
+  // The default, common-case render: the pre-baked GIF loop, a single
+  // <img> with no CSS keyframes driving it at all — this is the fix for
+  // the lag (see LOGO_GIF_SRC above). Falls through to the original
+  // live CSS-keyframe version below only if that GIF itself ever fails
+  // to load (e.g. not deployed yet), so the logo never just disappears.
+  const [gifFailed, setGifFailed] = useState(false);
+  if (reveal && !gifFailed) {
+    return (
+      <span className={`dl-logo ${className}`} role="img" aria-label={alt}>
+        <img
+          src={LOGO_GIF_SRC}
+          onError={() => setGifFailed(true)}
+          alt=""
+          aria-hidden="true"
+          className={`${className} w-auto object-contain`}
+        />
+      </span>
+    );
+  }
 
   return (
     // A single accessible name lives on this wrapper (role="img") because
