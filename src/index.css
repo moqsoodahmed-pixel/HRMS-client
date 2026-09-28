@@ -715,8 +715,15 @@
   border: 1.5px solid rgba(148, 163, 184, 0.28);
   background:
     linear-gradient(128deg, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.18) 26%, rgba(99, 102, 241, 0.07) 52%, rgba(255, 255, 255, 0.55) 76%, rgba(255, 255, 255, 0.15) 100%);
-  backdrop-filter: blur(6px) saturate(140%);
-  -webkit-backdrop-filter: blur(6px) saturate(140%);
+  /* Was backdrop-filter: blur(6px) saturate(140%) — on an element that's
+     continuously rotated/translated in 3D (rotateX/Y/Z + translateZ below),
+     backdrop-filter forces the browser to re-sample and re-blur whatever's
+     behind it at the new position/angle on every single frame, which is one
+     of the most expensive things a compositor can be asked to do — doubly so
+     across 4 of these at once. A plain self-filter blurs only this element's
+     own (already translucent) pixels, which is independent of what's behind
+     it and far cheaper to animate, while still reading as soft glass. */
+  filter: blur(1px) saturate(140%);
   box-shadow: 0 24px 50px -26px rgba(30, 41, 59, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   transform-style: preserve-3d;
   animation-name: auth-ribbon-tumble;
@@ -754,8 +761,13 @@
   border-color: rgba(99, 102, 241, 0.18);
   background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.35), transparent 60%);
   box-shadow: inset 0 0 40px rgba(255, 255, 255, 0.5), 0 20px 46px -30px rgba(30, 41, 59, 0.2);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  /* Was backdrop-filter: blur(2px) — same reasoning as .auth-glass-ribbon
+     above: this ring is also continuously 3D-transformed, so a backdrop
+     blur here re-samples the page behind it every frame. The 2px radius was
+     already minimal and mostly imperceptible against a translucent ring
+     this thin, so it's dropped rather than swapped to a self-filter —
+     border + box-shadow + the radial gradient already carry the "glass"
+     read on their own. */
   transform-style: preserve-3d;
   animation-name: auth-ring-tumble;
   animation-timing-function: ease-in-out;
@@ -1086,17 +1098,19 @@
   background:
     radial-gradient(60% 65% at 32% 26%, rgba(255, 255, 255, 0.6), transparent 62%),
     linear-gradient(135deg, rgba(240, 247, 255, 0.55) 0%, rgba(219, 234, 254, 0.32) 48%, rgba(199, 210, 254, 0.2) 100%);
-  backdrop-filter: blur(8px) saturate(150%);
-  -webkit-backdrop-filter: blur(8px) saturate(150%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.65),
     inset 0 0 0 1px rgba(255, 255, 255, 0.32),
     0 0 30px 4px rgba(56, 189, 248, 0.16),
     0 20px 40px -24px rgba(79, 70, 229, 0.3);
-  /* A few px of self-blur feathers the badge's own edge so it dissolves
-     into the background rather than cutting off hard, on top of the
-     already-soft box-shadow. */
-  filter: blur(3px);
+  /* Was backdrop-filter: blur(8px) saturate(150%) PLUS this same self-blur
+     — two separate blurs on an element that also runs a continuous scale
+     animation (auth-halo-breathe below). The backdrop-filter was the
+     expensive one (re-sampling the page behind it every frame at the new
+     scale); folded its saturate() into this single self-filter and dropped
+     the backdrop-filter outright — the badge's own gradient/shadow already
+     carries the glass look, feathered by this blur exactly as before. */
+  filter: blur(3px) saturate(150%);
   transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   animation: auth-halo-breathe 6s ease-in-out infinite;
   pointer-events: none;

@@ -7,6 +7,7 @@ import { authAPI } from '../api/axios';
 import { Modal, FormField, AnimatedLogo } from '../components/ui';
 import { errorMessage } from '../lib/format';
 import { getCurrentLocation } from '../lib/geolocation';
+import { isLowPowerDevice } from '../lib/perfTier';
 
 // All of the following arrays are fixed (not re-randomized per render) so
 // none of these ambient layers ever causes a reflow or a visual "jump" on
@@ -53,7 +54,13 @@ const SPHERES = [
 ];
 
 // Layer 8 — tiny sparkle / crystal-fragment glints, twinkling independently.
-const SPARKLES = Array.from({ length: 14 }, (_, i) => ({
+// Count trimmed from 14 -> 8: each is cheap on its own, but every one is
+// still a separately-composited, continuously-animated layer, and this adds
+// up across the whole scene (see isLowPowerDevice()'s doc comment for the
+// full picture) — noticeably fewer of these was one of the changes that
+// actually moved the needle on weaker hardware, without the field reading
+// as noticeably sparser.
+const SPARKLES = Array.from({ length: 8 }, (_, i) => ({
   top: `${(i * 17 + 6) % 92}%`,
   left: `${(i * 29 + 4) % 96}%`,
   opacity: 0.55 + ((i * 13) % 40) / 100,
@@ -64,7 +71,8 @@ const SPARKLES = Array.from({ length: 14 }, (_, i) => ({
 // Layer 9 — volumetric particles: varied size/opacity/duration/delay, each
 // on a loose non-repeating drift path (see .auth-glow-particle's keyframe,
 // which reads --p1x/--p1y/--p2x/--p2y/--p3x/--p3y per-particle).
-const PARTICLES = Array.from({ length: 22 }, (_, i) => ({
+// Count trimmed from 22 -> 12 for the same reason as SPARKLES above.
+const PARTICLES = Array.from({ length: 12 }, (_, i) => ({
   left: `${(i * 37 + 5) % 100}%`,
   size: 1.5 + ((i * 7) % 4),
   opacity: 0.4 + ((i * 11) % 40) / 100,
@@ -115,14 +123,24 @@ export default function Login() {
   const logoBoxRef = useRef(null);
   const logoHaloRef = useRef(null);
   const reducedMotion = useMemo(prefersReducedMotion, []);
+  // Computed once via a synchronous CPU probe (see lib/perfTier.js) — true
+  // on genuinely weak/"potato" hardware, regardless of whether it's a
+  // phone, a laptop or a desktop. Gates out the heaviest background layers
+  // (the 3D-tumbling glass ribbons/rings, spheres, waves, reflections) and
+  // switches AnimatedLogo to its plain static frame instead of the looping
+  // shatter animation, so those devices get a lighter, still-polished page
+  // instead of a stuttery one. Mid/high-end hardware is completely
+  // unaffected and keeps the full effect exactly as before.
+  const lowPower = useMemo(isLowPowerDevice, []);
 
   // Subtle pointer-driven depth: a small tilt on the card and independent
   // parallax drift on the background layers. Pure CSS custom properties
   // updated via rAF-throttled transform writes only — no layout reads in
   // the handler, so this never triggers layout thrashing. Skipped
-  // entirely for touch devices and prefers-reduced-motion.
+  // entirely for touch devices, prefers-reduced-motion, and low-power
+  // devices (one more continuous per-frame cost removed for them).
   useEffect(() => {
-    if (reducedMotion) return undefined;
+    if (reducedMotion || lowPower) return undefined;
     const el = sceneRef.current;
     if (!el) return undefined;
     let raf = null;
@@ -152,7 +170,7 @@ export default function Login() {
       el.removeEventListener('pointerleave', onLeave);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [reducedMotion]);
+  }, [reducedMotion, lowPower]);
 
   // Size the logo's glass glow to the logo itself: measure the actual
   // rendered box of the AnimatedLogo wrapper (which always matches the
@@ -243,8 +261,13 @@ export default function Login() {
         />
       ))}
 
-      {/* Layer 4 — floating 3D glass ribbons */}
-      {RIBBONS.map((r, i) => (
+      {/* Layer 4 — floating 3D glass ribbons. Skipped on low-power devices:
+          these tumble continuously in 3D AND previously carried a
+          backdrop-filter blur (now a plain self-filter — see index.css),
+          which was the single heaviest combination on the page; on weak
+          hardware it's cheaper to not render them at all than to keep
+          asking for it every frame. */}
+      {!lowPower && RIBBONS.map((r, i) => (
         <div
           key={i}
           className="auth-glass-ribbon auth-parallax"
@@ -263,7 +286,7 @@ export default function Login() {
 
       {/* Layer 5 — floating glass rings (large translucent rings / abstract
           glass architecture), tumbling slowly in 3D */}
-      {RINGS.map((r, i) => (
+      {!lowPower && RINGS.map((r, i) => (
         <div
           key={i}
           className="auth-glass-ring auth-parallax"
@@ -281,7 +304,7 @@ export default function Login() {
       ))}
 
       {/* Layer 6 — rotating glass arcs (partial rings) */}
-      {ARCS.map((a, i) => (
+      {!lowPower && ARCS.map((a, i) => (
         <div
           key={i}
           className="auth-glass-arc"
@@ -294,7 +317,7 @@ export default function Login() {
       ))}
 
       {/* Layer 7 — floating translucent glass spheres */}
-      {SPHERES.map((s, i) => (
+      {!lowPower && SPHERES.map((s, i) => (
         <div
           key={i}
           className="auth-glass-sphere"
@@ -308,7 +331,7 @@ export default function Login() {
       ))}
 
       {/* Layer 8 — tiny sparkle / crystal-fragment glints */}
-      {!reducedMotion && SPARKLES.map((sp, i) => (
+      {!reducedMotion && !lowPower && SPARKLES.map((sp, i) => (
         <div
           key={i}
           className="auth-sparkle"
@@ -322,7 +345,7 @@ export default function Login() {
       ))}
 
       {/* Layer 9 — volumetric particles */}
-      {!reducedMotion && PARTICLES.map((p, i) => (
+      {!reducedMotion && !lowPower && PARTICLES.map((p, i) => (
         <span
           key={i}
           className="auth-glow-particle"
@@ -337,12 +360,14 @@ export default function Login() {
         />
       ))}
 
-      {/* Layer 10 — tinted depth fog (masked away from the logo/card column) */}
-      <div className="auth-fog auth-fog--near" aria-hidden="true" />
-      <div className="auth-fog auth-fog--far" aria-hidden="true" />
+      {/* Layer 10 — tinted depth fog (masked away from the logo/card column).
+          Skipped on low-power devices — each is a large, animated,
+          filter:blur() layer. */}
+      {!lowPower && <div className="auth-fog auth-fog--near" aria-hidden="true" />}
+      {!lowPower && <div className="auth-fog auth-fog--far" aria-hidden="true" />}
 
       {/* Layer 11 — enormous barely-visible glass waves */}
-      {WAVES.map((w, i) => (
+      {!lowPower && WAVES.map((w, i) => (
         <div
           key={i}
           className="auth-wave"
@@ -351,11 +376,13 @@ export default function Login() {
         />
       ))}
 
-      {/* Layer 12 — faint blueprint grid */}
+      {/* Layer 12 — faint blueprint grid. Cheap (no blur, a static
+          background-image drifting by background-position only) — kept for
+          every device tier. */}
       <div className="auth-blueprint" aria-hidden="true" />
 
       {/* Layer 13 — slow ambient reflections */}
-      {REFLECTIONS.map((r, i) => (
+      {!lowPower && REFLECTIONS.map((r, i) => (
         <div
           key={i}
           className="auth-reflection"
@@ -376,7 +403,13 @@ export default function Login() {
               oversized ellipse. */}
           <div ref={logoHaloRef} className="auth-logo-halo" aria-hidden="true" />
           <div ref={logoBoxRef} className="relative mb-4 inline-flex">
-            <AnimatedLogo className="h-16" />
+            {/* Low-power devices get the plain, always-visible logo — no
+                clip-path segments, no shatter loop — instead of the
+                cinematic assemble/shatter animation. This is what "the logo
+                animation looks laggy" on weaker hardware actually was: the
+                mark itself renders identically either way, only the motion
+                is skipped. */}
+            <AnimatedLogo className="h-16" reveal={!lowPower} />
           </div>
           <p className="relative flex items-center gap-1.5 text-sm font-medium tracking-wide text-indigo-900/80">
             <ShieldCheck className="h-4 w-4 text-indigo-500" /> HRMS Portal

@@ -202,7 +202,7 @@ export default function Settings() {
         <SettingsSection
           icon={Smartphone}
           title="Device & Location Access"
-          description="Restrict sign-in to desktop/laptop devices and/or to within a radius of the office. CEO, CTO and Project Head are always exempt from both. Desktops/laptops have no GPS — their location is Wi-Fi/IP based and naturally less precise, so the radius check now automatically allows for that device's own reported accuracy, which is what was causing some desktops in the office to be denied while others passed."
+          description="Restrict sign-in to desktop/laptop devices and/or to within a radius of the office. CEO, CTO and Project Head are always exempt from both. Desktops/laptops have no GPS — their location is Wi-Fi/IP based and naturally less precise, so the radius check automatically allows for that device's own reported accuracy. If a few desktops on the same office network still get denied, it's usually because their Wi-Fi access point isn't in the browser's location database at all (so it falls back to a much coarser, sometimes city-wide fix) — no radius tolerance can fix a fix that isn't really near the office. Add the office's known public IP below to close that gap: any device on it is trusted without needing an accurate GPS/Wi-Fi fix at all."
         >
           <div className="mb-4 flex flex-wrap items-center gap-6">
             <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
@@ -256,6 +256,14 @@ export default function Settings() {
               <MapPin className="h-3.5 w-3.5" /> Office location restriction is on but coordinates aren't set yet — every restricted sign-in will be denied until they are.
             </p>
           )}
+
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <OfficeIpAllowlistField
+              value={active.security?.officeIpAllowlist}
+              onChange={(list) => update('security', { officeIpAllowlist: list })}
+            />
+          </div>
+
           <SectionSaveButton onSave={() => submitSection('security')} disabled={!form?.security} loading={save.isPending} />
         </SettingsSection>
 
@@ -263,6 +271,41 @@ export default function Settings() {
         <AccountAccessSection />
       </div>
     </div>
+  );
+}
+
+/**
+ * Textarea for security.officeIpAllowlist (one IP or CIDR range per line —
+ * see models/OrgSettings.js and services/accessControlService.js for what
+ * this is for). Keeps its own local text so typing/newlines feel normal
+ * (a controlled value rebuilt from the parsed array on every keystroke
+ * would fight the user), and only reports the parsed array upward via
+ * onChange. Blank lines are dropped when parsing so the user doesn't have
+ * to clean up trailing empty lines before saving.
+ */
+function OfficeIpAllowlistField({ value, onChange }) {
+  const [text, setText] = useState(() => (Array.isArray(value) ? value.join('\n') : ''));
+
+  const handleChange = (e) => {
+    const next = e.target.value;
+    setText(next);
+    const list = next.split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean);
+    onChange(list);
+  };
+
+  return (
+    <FormField
+      label="Office public IP allowlist (optional)"
+      hint="One IP or CIDR range per line, e.g. 203.0.113.5 or 203.0.113.0/24 — find it by searching “what's my IP” from an office computer. Any sign-in from one of these is trusted as being at the office, without needing a precise GPS/Wi-Fi location fix."
+    >
+      <textarea
+        className="input min-h-[84px] font-mono text-xs"
+        value={text}
+        onChange={handleChange}
+        placeholder={'e.g.\n203.0.113.5\n198.51.100.0/24'}
+        spellCheck={false}
+      />
+    </FormField>
   );
 }
 
