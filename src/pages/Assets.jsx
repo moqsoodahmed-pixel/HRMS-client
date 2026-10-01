@@ -414,7 +414,7 @@ function AssetFormModal({ open, asset, onClose, onSaved }) {
       notes: asset.notes || '',
       warrantyStart: asset.warrantyStart?.slice(0, 10) || '',
       warrantyEnd: asset.warrantyEnd?.slice(0, 10) || '',
-      hasAMC: asset.hasAMC || false,
+      hasAMC: asset.amc ?? asset.hasAMC ?? false,
       amcStart: asset.amcStart?.slice(0, 10) || '',
       amcEnd: asset.amcEnd?.slice(0, 10) || '',
       vendorName: asset.vendorName || '',
@@ -446,6 +446,12 @@ function AssetFormModal({ open, asset, onClose, onSaved }) {
     setErrors(next);
     if (Object.keys(next).length) { setTab('Details'); return; }
     const payload = { ...form };
+    // The Category dropdown is stored in `form.type`; the API requires it under
+    // `assetCategory` as well. Send both so server validation + code generation work.
+    payload.assetCategory = form.type;
+    // The AMC checkbox is stored as `hasAMC`; the API/model field is `amc`.
+    payload.amc = !!form.hasAMC;
+    delete payload.hasAMC;
     if (payload.purchaseValue !== '') payload.purchaseValue = Number(payload.purchaseValue);
     else delete payload.purchaseValue;
     save.mutate(payload);
