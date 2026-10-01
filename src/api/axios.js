@@ -169,6 +169,7 @@ export const payrollAPI = {
   generateBulk: (data) => api.post('/payroll/payslips/generate-bulk', data),
   setStatus: (id, status) => api.patch(`/payroll/payslips/${id}/status`, { status }),
   download: (id) => api.get(`/payroll/payslips/${id}/download`, { responseType: 'blob' }),
+  bulkExport: (params) => api.get('/payroll/payslips/export', { params: clean(params) }),
 };
 
 /**
@@ -235,6 +236,12 @@ export const assetAPI = {
   assign: (id, data) => api.post(`/assets/${id}/assign`, data),
   returnAsset: (id, data) => api.post(`/assets/${id}/return`, data),
   history: (id) => api.get(`/assets/${id}/history`),
+  qr: (id) => api.get(`/assets/${id}/qr`),
+  timeline: (id) => api.get(`/assets/${id}/timeline`),
+  updateWarranty: (id, data) => api.patch(`/assets/${id}/warranty`, data),
+  markLost: (id, data) => api.post(`/assets/${id}/lost`, data),
+  transfer: (id, data) => api.post(`/assets/${id}/transfer`, data),
+  export: () => api.get('/assets/export'),
 };
 
 export const onboardingAPI = {

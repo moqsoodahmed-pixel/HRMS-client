@@ -74,9 +74,14 @@ export const ANNOUNCEMENT_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 export const TASK_STATUSES = ['TODO', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED'];
 
 /** Canonical asset statuses. Legacy values are still rendered via ASSET_STATUS_LABELS. */
-export const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'RETURNED', 'MAINTENANCE', 'RETIRED'];
+export const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'RETURNED', 'MAINTENANCE', 'UNDER_REPAIR', 'LOST', 'TRANSFERRED', 'RETIRED', 'DISPOSED'];
 export const ASSET_CONDITIONS = ['NEW', 'GOOD', 'FAIR', 'POOR', 'DAMAGED'];
-export const ASSET_TYPES = ['Laptop', 'Desktop', 'Monitor', 'Mobile', 'Tablet', 'Peripheral', 'Furniture', 'Networking', 'Software Licence', 'Other'];
+export const ASSET_TYPES = [
+  'Laptop', 'Desktop', 'Monitor', 'Keyboard', 'Mouse', 'Headset',
+  'Printer', 'Scanner', 'Mobile', 'Tablet', 'Router', 'Switch',
+  'Server', 'Storage', 'Camera', 'Projector', 'UPS', 'Biometric',
+  'Networking', 'Accessory', 'Furniture', 'Other'
+];
 
 export const ASSET_STATUS_LABELS = {
   AVAILABLE: 'Available',
@@ -86,6 +91,33 @@ export const ASSET_STATUS_LABELS = {
   RETIRED: 'Retired',
   UNDER_REPAIR: 'Maintenance',
   DISPOSED: 'Retired',
+};
+
+export const ASSET_COMPANIES = ['DutyLaunch', 'LauncherDesk'];
+
+export const ASSET_COMPANY_CODES = {
+  DutyLaunch: 'DL',
+  LauncherDesk: 'LD',
+};
+
+export const ASSET_CATEGORY_CODES = {
+  Laptop: 'LAP', Desktop: 'DES', Monitor: 'MON', Keyboard: 'KEY', Mouse: 'MOU',
+  Headset: 'HST', Printer: 'PRN', Scanner: 'SCN', Mobile: 'MOB', Tablet: 'TAB',
+  Router: 'RTR', Switch: 'SWT', Server: 'SRV', Storage: 'STG', Camera: 'CAM',
+  Projector: 'PRO', UPS: 'UPS', Biometric: 'BIO', Networking: 'NET',
+  Accessory: 'ACC', Furniture: 'FUR', Other: 'OTH',
+};
+
+export const ASSET_STATUS_LABELS_ENTERPRISE = {
+  AVAILABLE: 'Available',
+  ASSIGNED: 'Assigned',
+  RETURNED: 'Returned',
+  MAINTENANCE: 'Maintenance',
+  UNDER_REPAIR: 'Under Repair',
+  LOST: 'Lost',
+  TRANSFERRED: 'Transferred',
+  RETIRED: 'Retired',
+  DISPOSED: 'Disposed',
 };
 
 export const DOCUMENT_CATEGORIES = [
@@ -176,8 +208,8 @@ export const STATUS_TONES = {
   // Document checklist (required-document tracking)
   MISSING: 'red', UPLOADED: 'blue', UNDER_REVIEW: 'amber', COMPLETE: 'green',
   // Assets
-  AVAILABLE: 'green', ASSIGNED: 'blue', RETURNED: 'gray', MAINTENANCE: 'amber', RETIRED: 'red',
-  UNDER_REPAIR: 'amber', DISPOSED: 'red',
+  AVAILABLE: 'green', ASSIGNED: 'blue', RETURNED: 'gray', MAINTENANCE: 'amber', RETIRED: 'gray',
+  UNDER_REPAIR: 'amber', DISPOSED: 'gray', LOST: 'red', TRANSFERRED: 'purple',
   NEW: 'green', GOOD: 'green', FAIR: 'amber', POOR: 'orange', DAMAGED: 'red',
   // Tasks
   TODO: 'gray', IN_PROGRESS: 'blue', COMPLETED: 'green', BLOCKED: 'red', SKIPPED: 'gray',
