@@ -29,9 +29,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     Search, RefreshCw, ChevronLeft, ChevronRight, Eye, Phone, Mail, Building2,
-    Calendar, X, Sparkles, Target, PhoneCall, UserPlus, CheckCircle2, XCircle,
-    Clock, History, ListChecks, PhoneMissed, Flame, Archive,
-    ArrowRight, Activity as ActivityIcon, Inbox,
+    Calendar, X, Sparkles, Target, PhoneCall, CheckCircle2, XCircle,
+    Clock, ListChecks, PhoneMissed, Flame, Archive, Inbox, ArrowRight, History,
 } from 'lucide-react';
 import { leadsAPI } from '../api/axios';
 import { StatCard, StatusBadge, ProgressBar, EmptyState, LoadingBlock, Avatar } from '../components/ui';
@@ -102,57 +101,14 @@ function useLeadInsights(refreshKey) {
     const load = useCallback(async () => {
         setState((s) => ({ ...s, loading: true, error: '' }));
         try {
-            const [
-                countResults,
-                totalRes,
-                todayRes,
-                newRes,
-                contactedRes,
-                interestedRes,
-            ] = await Promise.all([
+            const [countResults, totalRes, todayRes] = await Promise.all([
                 Promise.all(ALL_STATUSES.map((s) => leadsAPI.list({ status: s, limit: 1 }))),
                 leadsAPI.list({ limit: 1 }),
                 leadsAPI.list({ leadDate: 'TODAY', limit: 1 }),
-                leadsAPI.list({ status: 'NEW', limit: 60 }),
-                leadsAPI.list({ status: 'CONTACTED', limit: 60 }),
-                leadsAPI.list({ status: 'INTERESTED', limit: 60 }),
             ]);
 
             const counts = {};
             ALL_STATUSES.forEach((s, i) => { counts[s] = countResults[i].data.meta?.total || 0; });
-
-            const newLeads = newRes.data.data || [];
-            const followUpPool = [...(contactedRes.data.data || []), ...(interestedRes.data.data || [])];
-
-            const needsFirstContact = [...newLeads]
-                .sort((a, b) => new Date(a.assignedAt || a.createdAt) - new Date(b.assignedAt || b.createdAt))
-                .slice(0, 8);
-
-            const needsFollowUp = [...followUpPool]
-                .sort((a, b) => {
-                    const at = a.lastContactedAt ? new Date(a.lastContactedAt) : new Date(a.assignedAt || a.createdAt);
-                    const bt = b.lastContactedAt ? new Date(b.lastContactedAt) : new Date(b.assignedAt || b.createdAt);
-                    return at - bt; // oldest / most overdue first
-                })
-                .slice(0, 8);
-
-            // Recent activity — flatten statusHistory across the working set we
-            // already fetched (new + contacted + interested leads) and sort by
-            // when each change actually happened. Real audit entries only.
-            const activity = [...newLeads, ...followUpPool]
-                .flatMap((lead) =>
-                    (lead.statusHistory || []).map((h) => ({
-                        leadId: lead._id,
-                        leadName: lead.name,
-                        company: lead.company,
-                        previousStatus: h.previousStatus,
-                        newStatus: h.newStatus,
-                        notes: h.notes,
-                        changedAt: h.changedAt,
-                    }))
-                )
-                .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))
-                .slice(0, 10);
 
             setState({
                 loading: false,
@@ -160,9 +116,9 @@ function useLeadInsights(refreshKey) {
                 counts,
                 totalAssigned: totalRes.data.meta?.total || 0,
                 todayAssigned: todayRes.data.meta?.total || 0,
-                needsFirstContact,
-                needsFollowUp,
-                activity,
+                needsFirstContact: [],
+                needsFollowUp: [],
+                activity: [],
             });
         } catch (err) {
             setState((s) => ({ ...s, loading: false, error: 'Could not load your workspace insights.' }));
@@ -293,91 +249,6 @@ function FunnelCard({ insights }) {
                 <div className="mt-4 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
                     <XCircle className="h-3.5 w-3.5" />
                     {closedCount} lead{closedCount !== 1 ? 's' : ''} closed without converting (Not Interested / Lost)
-                </div>
-            )}
-        </div>
-    );
-}
-
-// ── Task panels (needs first contact / needs follow-up) ────────────────
-// NOTE: Tailwind's JIT scanner only picks up class names it can see as
-// literal strings in source — a template-built class like `text-${tone}-600`
-// would silently produce NO css at all in the production build. So `tone`
-// is resolved through this static, fully-spelled-out map instead of ever
-// being interpolated into a class name.
-const TASK_PANEL_TONES = {
-    blue: { icon: 'text-blue-600', badgeBg: 'bg-blue-100', badgeText: 'text-blue-700' },
-    amber: { icon: 'text-amber-600', badgeBg: 'bg-amber-100', badgeText: 'text-amber-700' },
-};
-
-function TaskPanel({ title, icon: Icon, tone, items, emptyLabel, dateLabel, dateField, onOpen }) {
-    const t = TASK_PANEL_TONES[tone] || TASK_PANEL_TONES.blue;
-    return (
-        <div className="card flex h-full flex-col p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
-                <Icon className={`h-4 w-4 ${t.icon}`} /> {title}
-                {items.length > 0 && (
-                    <span className={`ml-auto rounded-full ${t.badgeBg} px-2 py-0.5 text-xs font-semibold ${t.badgeText}`}>
-                        {items.length}
-                    </span>
-                )}
-            </h2>
-            {items.length === 0 ? (
-                <p className="flex flex-1 items-center justify-center py-6 text-center text-xs text-gray-400">{emptyLabel}</p>
-            ) : (
-                <div className="-mx-1 space-y-1 overflow-y-auto">
-                    {items.map((lead) => (
-                        <button
-                            key={lead._id}
-                            onClick={() => onOpen(lead)}
-                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-gray-50"
-                        >
-                            <Avatar name={lead.name} size="sm" />
-                            <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-medium text-gray-900">{lead.name}</p>
-                                <p className="truncate text-xs text-gray-500">{lead.company || '—'}</p>
-                            </div>
-                            <span className="whitespace-nowrap text-right text-[11px] text-gray-400">
-                                {dateLabel} {relativeTime(lead[dateField] || lead.createdAt)}
-                            </span>
-                        </button>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-// ── Recent activity feed ────────────────────────────────────────────────
-function ActivityFeed({ insights }) {
-    const { activity, loading } = insights;
-    return (
-        <div className="card p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
-                <ActivityIcon className="h-4 w-4 text-primary-600" /> Recent Activity
-            </h2>
-            {loading ? (
-                <LoadingBlock label="Loading activity…" />
-            ) : activity.length === 0 ? (
-                <p className="py-6 text-center text-xs text-gray-400">No recent status changes yet.</p>
-            ) : (
-                <div className="space-y-3">
-                    {activity.map((a, i) => (
-                        <div key={i} className="flex gap-3 border-l-2 border-primary-100 pl-3">
-                            <div className="flex-1 text-xs">
-                                <p className="text-gray-700">
-                                    <span className="font-medium text-gray-900">{a.leadName}</span>
-                                    {a.company && <span className="text-gray-400"> · {a.company}</span>}
-                                </p>
-                                <p className="mt-0.5 text-gray-500">
-                                    {a.previousStatus && <>{humanise(a.previousStatus)} → </>}
-                                    <span className="font-medium">{humanise(a.newStatus)}</span>
-                                    {a.notes && <span className="text-gray-400"> — "{a.notes}"</span>}
-                                </p>
-                            </div>
-                            <span className="whitespace-nowrap text-[11px] text-gray-400">{relativeTime(a.changedAt)}</span>
-                        </div>
-                    ))}
                 </div>
             )}
         </div>
@@ -731,169 +602,143 @@ export default function BDWorkspace({
             <WelcomeHeader displayName={displayName} deptLabel={deptLabel} insights={insights} />
             <KPIGrid insights={insights} activeStatus={statusFilter} onSelectStatus={handleKPISelect} />
 
-            <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <FunnelCard insights={insights} />
-                <TaskPanel
-                    title="Needs First Contact"
-                    icon={UserPlus}
-                    tone="blue"
-                    items={insights.needsFirstContact}
-                    emptyLabel="Nothing waiting — every new lead has been contacted."
-                    dateLabel="assigned"
-                    dateField="assignedAt"
-                    onOpen={openLead}
-                />
-                <TaskPanel
-                    title="Needs Follow-up"
-                    icon={Clock}
-                    tone="amber"
-                    items={insights.needsFollowUp}
-                    emptyLabel="You're all caught up on follow-ups."
-                    dateLabel="last contact"
-                    dateField="lastContactedAt"
-                    onOpen={openLead}
-                />
-            </div>
+            <FunnelCard insights={insights} />
 
-            <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <div className="lg:col-span-2">
-                    {/* Filters — tableRef anchors here so KPI-card clicks scroll straight to this */}
-                    <div ref={tableRef} className="card mb-4 flex flex-wrap items-center gap-3 p-3">
-                        <div className="relative min-w-48 flex-1">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                            <input
-                                className="form-input pl-9"
-                                placeholder="Search name, phone, email, company…"
-                                value={search}
-                                onChange={onSearchChange}
-                            />
-                        </div>
-                        <select className="form-input w-40" value={statusFilter} onChange={(e) => onStatusFilterChange(e.target.value)}>
-                            <option value="">All Statuses</option>
-                            {ALL_STATUSES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
+            <div className="mb-6">
+                {/* Filters — tableRef anchors here so KPI-card clicks scroll straight to this */}
+                <div ref={tableRef} className="card mb-4 flex flex-wrap items-center gap-3 p-3">
+                    <div className="relative min-w-48 flex-1">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                            className="form-input pl-9"
+                            placeholder="Search name, phone, email, company…"
+                            value={search}
+                            onChange={onSearchChange}
+                        />
+                    </div>
+                    <select className="form-input w-40" value={statusFilter} onChange={(e) => onStatusFilterChange(e.target.value)}>
+                        <option value="">All Statuses</option>
+                        {ALL_STATUSES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
+                    </select>
+                    <div className="flex items-center gap-1">
+                        <select
+                            aria-label="Lead Date Filter"
+                            className="form-input w-36"
+                            value={customDate ? 'CUSTOM' : leadDateFilter}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === 'CUSTOM') setShowCalendar(true);
+                                else { onCustomDateChange(''); onLeadDateFilterChange(val); }
+                            }}
+                        >
+                            <option value="">All Leads</option>
+                            <option value="TODAY">Today</option>
+                            <option value="PREVIOUS">Previous</option>
+                            {customDate && <option value="CUSTOM">{customDate}</option>}
                         </select>
-                        <div className="flex items-center gap-1">
-                            <select
-                                aria-label="Lead Date Filter"
-                                className="form-input w-36"
-                                value={customDate ? 'CUSTOM' : leadDateFilter}
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val === 'CUSTOM') setShowCalendar(true);
-                                    else { onCustomDateChange(''); onLeadDateFilterChange(val); }
-                                }}
+                        <div className="relative" ref={calendarRef}>
+                            <button
+                                type="button"
+                                aria-label="Calendar Lead Filter"
+                                onClick={() => setShowCalendar((p) => !p)}
+                                className={`btn-secondary !p-2 ${customDate ? 'border-primary-500 bg-primary-50 text-primary-600' : 'text-gray-600'}`}
+                                title="Filter by date"
                             >
-                                <option value="">All Leads</option>
-                                <option value="TODAY">Today</option>
-                                <option value="PREVIOUS">Previous</option>
-                                {customDate && <option value="CUSTOM">{customDate}</option>}
-                            </select>
-                            <div className="relative" ref={calendarRef}>
-                                <button
-                                    type="button"
-                                    aria-label="Calendar Lead Filter"
-                                    onClick={() => setShowCalendar((p) => !p)}
-                                    className={`btn-secondary !p-2 ${customDate ? 'border-primary-500 bg-primary-50 text-primary-600' : 'text-gray-600'}`}
-                                    title="Filter by date"
-                                >
-                                    <Calendar className="h-4 w-4" />
-                                </button>
-                                {showCalendar && (
-                                    <MiniCalendar
-                                        selectedDate={customDate}
-                                        onSelectDate={(d) => { onCustomDateChange(d); if (d) onLeadDateFilterChange(''); }}
-                                        onClose={() => setShowCalendar(false)}
-                                    />
-                                )}
-                            </div>
-                            {customDate && (
-                                <button onClick={() => onCustomDateChange('')} className="p-1 text-gray-400 hover:text-red-500" title="Clear date">
-                                    <X className="h-4 w-4" />
-                                </button>
+                                <Calendar className="h-4 w-4" />
+                            </button>
+                            {showCalendar && (
+                                <MiniCalendar
+                                    selectedDate={customDate}
+                                    onSelectDate={(d) => { onCustomDateChange(d); if (d) onLeadDateFilterChange(''); }}
+                                    onClose={() => setShowCalendar(false)}
+                                />
                             )}
                         </div>
-                        <button onClick={handleFullRefresh} className="btn-secondary flex items-center gap-2">
-                            <RefreshCw className="h-4 w-4" /> Refresh
+                        {customDate && (
+                            <button onClick={() => onCustomDateChange('')} className="p-1 text-gray-400 hover:text-red-500" title="Clear date">
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+                    <button onClick={handleFullRefresh} className="btn-secondary flex items-center gap-2">
+                        <RefreshCw className="h-4 w-4" /> Refresh
+                    </button>
+                </div>
+
+                {/* Active filter banner */}
+                {statusFilter && (
+                    <div className="mb-2 flex items-center gap-2 rounded-lg bg-primary-50 border border-primary-200 px-3 py-2 text-sm text-primary-700">
+                        <span className="font-medium">Filtering by: {statusFilter.replace(/_/g, ' ')}</span>
+                        <button onClick={() => onStatusFilterChange('')} className="ml-auto flex items-center gap-1 text-xs text-primary-500 hover:text-primary-700">
+                            <X className="h-3.5 w-3.5" /> Clear filter
                         </button>
                     </div>
+                )}
 
-                    {/* Active filter banner */}
-                    {statusFilter && (
-                        <div className="mb-2 flex items-center gap-2 rounded-lg bg-primary-50 border border-primary-200 px-3 py-2 text-sm text-primary-700">
-                            <span className="font-medium">Filtering by: {statusFilter.replace(/_/g, ' ')}</span>
-                            <button onClick={() => onStatusFilterChange('')} className="ml-auto flex items-center gap-1 text-xs text-primary-500 hover:text-primary-700">
-                                <X className="h-3.5 w-3.5" /> Clear filter
+                {/* Table */}
+                <div className="card overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                        <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                            <ListChecks className="h-4 w-4 text-primary-600" /> Your Leads
+                            {statusFilter && <span className="text-xs font-normal text-primary-600">— {statusFilter.replace(/_/g, ' ')}</span>}
+                        </h2>
+                        {newLeadsCount > 0 && (
+                            <button
+                                onClick={() => handleKPISelect(statusFilter === 'NEW' ? '' : 'NEW')}
+                                className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${statusFilter === 'NEW' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700 hover:bg-primary-100'}`}
+                            >
+                                {newLeadsCount} new
                             </button>
+                        )}
+                    </div>
+
+                    {loading ? (
+                        <LoadingBlock />
+                    ) : listError ? (
+                        <EmptyState icon={Inbox} title="Could not load leads" description={listError} />
+                    ) : leads.length === 0 ? (
+                        <EmptyState title="No leads found" description="Try adjusting your filters." />
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                                        <th className="px-4 py-3 text-left">Lead</th>
+                                        <th className="px-4 py-3 text-left">Contact</th>
+                                        <th className="px-4 py-3 text-left">Status</th>
+                                        <th className="px-4 py-3 text-left">Call Outcome</th>
+                                        <th className="px-4 py-3 text-left">Service Interest</th>
+                                        <th className="px-4 py-3 text-left">Last Contact</th>
+                                        <th className="px-4 py-3 text-left">Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {leads.map((lead) => (
+                                        <LeadRow
+                                            key={lead._id}
+                                            lead={lead}
+                                            isRevealedRow={revealed?.leadId === lead._id}
+                                            revealed={revealed}
+                                            onReveal={onReveal}
+                                            onClearReveal={onClearReveal}
+                                            onOpen={openLead}
+                                        />
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     )}
 
-                    {/* Table */}
-                    <div className="card overflow-hidden">
-                        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                            <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                                <ListChecks className="h-4 w-4 text-primary-600" /> Your Leads
-                                {statusFilter && <span className="text-xs font-normal text-primary-600">— {statusFilter.replace(/_/g, ' ')}</span>}
-                            </h2>
-                            {newLeadsCount > 0 && (
-                                <button
-                                    onClick={() => handleKPISelect(statusFilter === 'NEW' ? '' : 'NEW')}
-                                    className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${statusFilter === 'NEW' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700 hover:bg-primary-100'}`}
-                                >
-                                    {newLeadsCount} new
-                                </button>
-                            )}
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3">
+                            <p className="text-sm text-gray-500">{total} lead{total !== 1 ? 's' : ''} · Page {page} of {totalPages}</p>
+                            <div className="flex gap-2">
+                                <button onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page === 1} className="btn-secondary px-2 py-1"><ChevronLeft className="h-4 w-4" /></button>
+                                <button onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page === totalPages} className="btn-secondary px-2 py-1"><ChevronRight className="h-4 w-4" /></button>
+                            </div>
                         </div>
-
-                        {loading ? (
-                            <LoadingBlock />
-                        ) : listError ? (
-                            <EmptyState icon={Inbox} title="Could not load leads" description={listError} />
-                        ) : leads.length === 0 ? (
-                            <EmptyState title="No leads found" description="Try adjusting your filters." />
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                                            <th className="px-4 py-3 text-left">Lead</th>
-                                            <th className="px-4 py-3 text-left">Contact</th>
-                                            <th className="px-4 py-3 text-left">Status</th>
-                                            <th className="px-4 py-3 text-left">Call Outcome</th>
-                                            <th className="px-4 py-3 text-left">Service Interest</th>
-                                            <th className="px-4 py-3 text-left">Last Contact</th>
-                                            <th className="px-4 py-3 text-left">Notes</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {leads.map((lead) => (
-                                            <LeadRow
-                                                key={lead._id}
-                                                lead={lead}
-                                                isRevealedRow={revealed?.leadId === lead._id}
-                                                revealed={revealed}
-                                                onReveal={onReveal}
-                                                onClearReveal={onClearReveal}
-                                                onOpen={openLead}
-                                            />
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-
-                        {totalPages > 1 && (
-                            <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3">
-                                <p className="text-sm text-gray-500">{total} lead{total !== 1 ? 's' : ''} · Page {page} of {totalPages}</p>
-                                <div className="flex gap-2">
-                                    <button onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page === 1} className="btn-secondary px-2 py-1"><ChevronLeft className="h-4 w-4" /></button>
-                                    <button onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page === totalPages} className="btn-secondary px-2 py-1"><ChevronRight className="h-4 w-4" /></button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    )}
                 </div>
-
-                <ActivityFeed insights={insights} />
             </div>
 
             <ArchivedSection onArchive={onArchive} />
