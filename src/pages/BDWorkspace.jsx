@@ -26,7 +26,7 @@
 // schema, or permission changes were made to build this.
 // ─────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     Search, RefreshCw, ChevronLeft, ChevronRight, Eye, Phone, Mail, Building2,
     Calendar, X, Sparkles, Target, PhoneCall, UserPlus, CheckCircle2, XCircle,
@@ -176,9 +176,11 @@ function useLeadInsights(refreshKey) {
 
 // ── Welcome header ──────────────────────────────────────────────────────
 function WelcomeHeader({ displayName, deptLabel, insights }) {
-    const { counts, totalAssigned, todayAssigned, needsFollowUp, loading } = insights;
+    const { counts, totalAssigned, todayAssigned, loading } = insights;
     const converted = counts.CONVERTED || 0;
     const conversionRate = totalAssigned > 0 ? Math.round((converted / totalAssigned) * 100) : 0;
+    // Actual count of leads needing follow-up (CONTACTED + INTERESTED), not the sliced preview array
+    const followUpCount = (counts.CONTACTED || 0) + (counts.INTERESTED || 0);
 
     return (
         <div className="relative mb-6 overflow-hidden rounded-2xl border border-primary-100 bg-gradient-to-br from-primary-600 via-primary-600 to-indigo-700 p-6 text-white shadow-lg shadow-primary-900/10 sm:p-8">
@@ -203,7 +205,7 @@ function WelcomeHeader({ displayName, deptLabel, insights }) {
                     {[
                         { label: 'Assigned Leads', value: totalAssigned },
                         { label: 'Assigned Today', value: todayAssigned },
-                        { label: 'Needs Follow-up', value: needsFollowUp.length },
+                        { label: 'Needs Follow-up', value: followUpCount },
                         { label: 'Conversion Rate', value: `${conversionRate}%` },
                     ].map((s) => (
                         <div key={s.label} className="rounded-xl bg-white/10 px-4 py-3 backdrop-blur-sm ring-1 ring-white/10">
@@ -704,6 +706,7 @@ export default function BDWorkspace({
     const [drawerLeadId, setDrawerLeadId] = useState(null);
     const [refreshKey, setRefreshKey] = useState(0);
     const insights = useLeadInsights(refreshKey);
+    const tableRef = useRef(null);
 
     const bumpInsights = () => setRefreshKey((k) => k + 1);
 
@@ -711,10 +714,22 @@ export default function BDWorkspace({
     const closeLead = () => setDrawerLeadId(null);
     const handleDrawerUpdated = () => { onRefresh(); bumpInsights(); };
 
+    // Refresh both the leads list AND the insights panel counts together
+    const handleFullRefresh = () => { onRefresh(); bumpInsights(); };
+
+    // When user clicks a KPI card, apply the filter AND scroll to the table
+    const handleKPISelect = (value) => {
+        onStatusFilterChange(value);
+        if (value) {
+            // Small delay so React re-renders the filter state before we scroll
+            setTimeout(() => tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+        }
+    };
+
     return (
         <div>
             <WelcomeHeader displayName={displayName} deptLabel={deptLabel} insights={insights} />
-            <KPIGrid insights={insights} activeStatus={statusFilter} onSelectStatus={onStatusFilterChange} />
+            <KPIGrid insights={insights} activeStatus={statusFilter} onSelectStatus={handleKPISelect} />
 
             <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <FunnelCard insights={insights} />
@@ -742,8 +757,8 @@ export default function BDWorkspace({
 
             <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <div className="lg:col-span-2">
-                    {/* Filters */}
-                    <div className="card mb-4 flex flex-wrap items-center gap-3 p-3">
+                    {/* Filters — tableRef anchors here so KPI-card clicks scroll straight to this */}
+                    <div ref={tableRef} className="card mb-4 flex flex-wrap items-center gap-3 p-3">
                         <div className="relative min-w-48 flex-1">
                             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                             <input
@@ -797,20 +812,31 @@ export default function BDWorkspace({
                                 </button>
                             )}
                         </div>
-                        <button onClick={onRefresh} className="btn-secondary flex items-center gap-2">
+                        <button onClick={handleFullRefresh} className="btn-secondary flex items-center gap-2">
                             <RefreshCw className="h-4 w-4" /> Refresh
                         </button>
                     </div>
+
+                    {/* Active filter banner */}
+                    {statusFilter && (
+                        <div className="mb-2 flex items-center gap-2 rounded-lg bg-primary-50 border border-primary-200 px-3 py-2 text-sm text-primary-700">
+                            <span className="font-medium">Filtering by: {statusFilter.replace(/_/g, ' ')}</span>
+                            <button onClick={() => onStatusFilterChange('')} className="ml-auto flex items-center gap-1 text-xs text-primary-500 hover:text-primary-700">
+                                <X className="h-3.5 w-3.5" /> Clear filter
+                            </button>
+                        </div>
+                    )}
 
                     {/* Table */}
                     <div className="card overflow-hidden">
                         <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
                             <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
                                 <ListChecks className="h-4 w-4 text-primary-600" /> Your Leads
+                                {statusFilter && <span className="text-xs font-normal text-primary-600">— {statusFilter.replace(/_/g, ' ')}</span>}
                             </h2>
                             {newLeadsCount > 0 && (
                                 <button
-                                    onClick={() => onStatusFilterChange(statusFilter === 'NEW' ? '' : 'NEW')}
+                                    onClick={() => handleKPISelect(statusFilter === 'NEW' ? '' : 'NEW')}
                                     className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${statusFilter === 'NEW' ? 'bg-primary-600 text-white' : 'bg-primary-50 text-primary-700 hover:bg-primary-100'}`}
                                 >
                                     {newLeadsCount} new
