@@ -30,7 +30,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Search, RefreshCw, ChevronLeft, ChevronRight, Eye, Phone, Mail, Building2,
     Calendar, X, Sparkles, Target, PhoneCall, UserPlus, CheckCircle2, XCircle,
-    Clock, History, ListChecks, PhoneMissed, Flame,
+    Clock, History, ListChecks, PhoneMissed, Flame, Archive,
     ArrowRight, Activity as ActivityIcon, Inbox,
 } from 'lucide-react';
 import { leadsAPI } from '../api/axios';
@@ -380,7 +380,7 @@ function ActivityFeed({ insights }) {
 const CALL_STATUS_OPTIONS = ['', 'Busy', 'Connected', 'Switched Off', 'not answered', 'picked but disconnected', 'out of service', 'call later'];
 const SERVICE_INTEREST_OPTIONS = ['', 'Startup India', 'GST', 'MSME', 'Trademark', 'Labour Certificate', 'Website Development', 'Others'];
 
-function LeadDrawer({ leadId, onClose, onUpdated, revealed, onReveal, onClearReveal }) {
+function LeadDrawer({ leadId, onClose, onUpdated, revealed, onReveal, onClearReveal, onArchive, archiving }) {
     const [lead, setLead] = useState(null);
     const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState('');
@@ -515,6 +515,15 @@ function LeadDrawer({ leadId, onClose, onUpdated, revealed, onReveal, onClearRev
                                         {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : saved ? <CheckCircle2 className="h-4 w-4" /> : null}
                                         {saved ? 'Saved' : saving ? 'Saving…' : 'Save Update'}
                                     </button>
+                                    {onArchive && (
+                                        <button
+                                            onClick={() => { onArchive(leadId); onClose(); }}
+                                            disabled={archiving}
+                                            className="w-full mt-2 flex items-center justify-center gap-2 rounded-lg border border-orange-200 px-4 py-2 text-sm font-medium text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-40"
+                                        >
+                                            <Archive className="h-4 w-4" /> Move to History
+                                        </button>
+                                    )}
                                 </div>
                             </section>
 
@@ -605,6 +614,74 @@ function LeadRow({ lead, isRevealedRow, revealed, onReveal, onClearReveal, onOpe
 // ─────────────────────────────────────────────────────────────────────────
 // Main export
 // ─────────────────────────────────────────────────────────────────────────
+// ── Archived Leads (Employee History) ────────────────────────────────────
+function ArchivedSection() {
+    const [open, setOpen] = useState(false);
+    const [leads, setLeads] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [total, setTotal] = useState(0);
+
+    useEffect(() => {
+        if (!open) return;
+        setLoading(true);
+        leadsAPI.archived({ page: 1, limit: 50 })
+            .then(r => { setLeads(r.data.data || []); setTotal(r.data.meta?.total || 0); })
+            .catch(() => { })
+            .finally(() => setLoading(false));
+    }, [open]);
+
+    // Fetch just the count on mount so we can show a badge
+    useEffect(() => {
+        leadsAPI.archived({ page: 1, limit: 1 })
+            .then(r => setTotal(r.data.meta?.total || 0))
+            .catch(() => { });
+    }, []);
+
+    return (
+        <div className="card mt-6 overflow-hidden">
+            <button
+                onClick={() => setOpen(o => !o)}
+                className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+            >
+                <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Archive className="h-4 w-4 text-gray-400" /> History
+                    {total > 0 && <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">{total}</span>}
+                </span>
+                <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} />
+            </button>
+            {open && (
+                <div className="border-t border-gray-100">
+                    {loading ? (
+                        <LoadingBlock />
+                    ) : leads.length === 0 ? (
+                        <p className="px-4 py-6 text-center text-sm text-gray-400">No archived leads yet</p>
+                    ) : (
+                        <div className="divide-y divide-gray-100">
+                            {leads.map(lead => (
+                                <div key={lead._id} className="flex items-center justify-between px-4 py-3">
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-900">{lead.name}</p>
+                                        {lead.company && <p className="text-xs text-gray-500">{lead.company}</p>}
+                                        {lead.archiveReason && <p className="text-xs text-gray-400 italic mt-0.5">{lead.archiveReason}</p>}
+                                    </div>
+                                    <div className="text-right">
+                                        <StatusPill status={lead.status} />
+                                        {lead.archivedAt && (
+                                            <p className="text-xs text-gray-400 mt-0.5">
+                                                {new Date(lead.archivedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function BDWorkspace({
     displayName, deptLabel,
     leads, total, page, totalPages, loading, listError, LIMIT,
@@ -616,6 +693,7 @@ export default function BDWorkspace({
     onPageChange, onRefresh,
     revealed, onReveal, onClearReveal,
     newLeadsCount,
+    onArchive, archiving,
 }) {
     const [drawerLeadId, setDrawerLeadId] = useState(null);
     const [refreshKey, setRefreshKey] = useState(0);
@@ -786,6 +864,8 @@ export default function BDWorkspace({
                 <ActivityFeed insights={insights} />
             </div>
 
+            <ArchivedSection onArchive={onArchive} />
+
             {drawerLeadId && (
                 <LeadDrawer
                     leadId={drawerLeadId}
@@ -794,6 +874,8 @@ export default function BDWorkspace({
                     revealed={revealed}
                     onReveal={onReveal}
                     onClearReveal={onClearReveal}
+                    onArchive={onArchive}
+                    archiving={archiving}
                 />
             )}
         </div>

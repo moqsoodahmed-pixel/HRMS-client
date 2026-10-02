@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Phone, Mail, Building2, Upload, Search, RefreshCw, ChevronLeft, ChevronRight,
   BarChart3, Users, TrendingUp, Eye, Edit2, RotateCcw, AlertCircle, CheckCircle2,
-  Filter, X, Info, Calendar, Trash2,
+  Filter, X, Info, Calendar, Trash2, Archive, ArchiveRestore, Clock,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { leadsAPI, employeeAPI } from '../api/axios';
@@ -814,7 +814,7 @@ export default function SalesLeads() {
     try { return new URLSearchParams(window.location.search).get('assignedTo') || ''; }
     catch { return ''; }
   });
-  const [activeTab, setActiveTab] = useState('leads'); // leads | stats
+  const [activeTab, setActiveTab] = useState('leads'); // leads | stats | history
   const [statusModal, setStatusModal] = useState(null);
   const [reassignModal, setReassignModal] = useState(null);
   const [historyModal, setHistoryModal] = useState(null);
@@ -905,6 +905,13 @@ export default function SalesLeads() {
   // is about to change underneath it.
   useEffect(() => { setSelectedIds(new Set()); }, [page, search, statusFilter, leadDateFilter, customDate, batchFilter]);
 
+  // Fetch the count for the History badge (lightweight — just one count query)
+  useEffect(() => {
+    leadsAPI.archived({ page: 1, limit: 1 })
+      .then(r => setArchivedTotal(r.data.meta?.total || 0))
+      .catch(() => { });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fetchBatches = useCallback(() => {
     if (canUpload) {
       leadsAPI.batches().then(r => setBatches(r.data.data || [])).catch(() => { });
@@ -981,6 +988,77 @@ export default function SalesLeads() {
     }
   };
 
+  // ── Archive / History ────────────────────────────────────────────────────
+  const [archiving, setArchiving] = useState(false);
+  const [archivedLeads, setArchivedLeads] = useState([]);
+  const [archivedTotal, setArchivedTotal] = useState(0);
+  const [archivedPage, setArchivedPage] = useState(1);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [archivedSearch, setArchivedSearch] = useState('');
+  const archivedTotalPages = Math.ceil(archivedTotal / LIMIT);
+
+  const fetchArchivedLeads = useCallback(async () => {
+    setArchivedLoading(true);
+    try {
+      const params = { page: archivedPage, limit: LIMIT };
+      if (archivedSearch) params.search = archivedSearch;
+      const res = await leadsAPI.archived(params);
+      setArchivedLeads(res.data.data || []);
+      setArchivedTotal(res.data.meta?.total || 0);
+    } catch (err) {
+      console.error(err);
+      setArchivedLeads([]);
+      setArchivedTotal(0);
+    } finally {
+      setArchivedLoading(false);
+    }
+  }, [archivedPage, archivedSearch]);
+
+  useEffect(() => {
+    if (activeTab === 'history') fetchArchivedLeads();
+  }, [activeTab, fetchArchivedLeads]);
+
+  const handleArchive = async (leadId, reason = '') => {
+    if (!window.confirm('Move this lead to History? You can restore it later.')) return;
+    setArchiving(true);
+    try {
+      await leadsAPI.archive(leadId, reason);
+      await fetchLeads();
+      if (activeTab === 'history') await fetchArchivedLeads();
+    } catch (err) {
+      window.alert(err.response?.data?.error?.message || 'Failed to archive lead.');
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Move ${selectedIds.size} selected lead(s) to History?`)) return;
+    setArchiving(true);
+    try {
+      await leadsAPI.bulkArchive(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      await fetchLeads();
+      if (activeTab === 'history') await fetchArchivedLeads();
+    } catch (err) {
+      window.alert(err.response?.data?.error?.message || 'Failed to archive leads.');
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const handleRestore = async (leadId) => {
+    if (!window.confirm('Restore this lead back to the active list?')) return;
+    try {
+      await leadsAPI.restore(leadId);
+      await fetchArchivedLeads();
+      await fetchLeads();
+    } catch (err) {
+      window.alert(err.response?.data?.error?.message || 'Failed to restore lead.');
+    }
+  };
+
   return (
     <div>
       {/*
@@ -1010,6 +1088,15 @@ export default function SalesLeads() {
                 className={`btn-secondary flex items-center gap-2 ${activeTab === 'stats' ? 'bg-primary-50 text-primary-700' : ''}`}
               >
                 <BarChart3 className="h-4 w-4" /> Dashboard
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`btn-secondary flex items-center gap-2 ${activeTab === 'history' ? 'bg-primary-50 text-primary-700' : ''}`}
+              >
+                <Clock className="h-4 w-4" /> History
+                {archivedTotal > 0 && (
+                  <span className="inline-flex items-center justify-center rounded-full bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">{archivedTotal}</span>
+                )}
               </button>
             </div>
           }
@@ -1144,6 +1231,18 @@ export default function SalesLeads() {
               >
                 <RotateCcw className="h-4 w-4" />
                 Assign selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+              </button>
+            )}
+            {selectedIds.size > 0 && (
+              <button
+                type="button"
+                onClick={handleBulkArchive}
+                disabled={archiving}
+                className="btn-secondary flex items-center gap-2 text-orange-600 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-40"
+                title={`Archive ${selectedIds.size} selected lead(s)`}
+              >
+                <Archive className="h-4 w-4" />
+                Archive{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
               </button>
             )}
             <button onClick={fetchLeads} className="btn-secondary flex items-center gap-2">
@@ -1291,6 +1390,14 @@ export default function SalesLeads() {
                                 </button>
                               </>
                             )}
+                            <button
+                              onClick={() => handleArchive(lead._id)}
+                              disabled={archiving}
+                              className="text-gray-400 hover:text-orange-600"
+                              title="Move to History"
+                            >
+                              <Archive className="h-4 w-4" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1317,6 +1424,126 @@ export default function SalesLeads() {
             )}
           </div>
         </>
+      )}
+
+      {/* ── History Tab (Archived Leads) ─────────────────────────────────── */}
+      {activeTab === 'history' && (
+        <div>
+          {/* Search */}
+          <div className="card mb-4 flex flex-wrap gap-3 p-3">
+            <div className="relative flex-1 min-w-48">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                className="form-input pl-9"
+                placeholder="Search archived leads…"
+                value={archivedSearch}
+                onChange={e => { setArchivedSearch(e.target.value); setArchivedPage(1); }}
+              />
+            </div>
+            <button onClick={fetchArchivedLeads} className="btn-secondary flex items-center gap-2">
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </button>
+          </div>
+
+          <div className="card overflow-hidden">
+            {archivedLoading ? (
+              <LoadingBlock />
+            ) : archivedLeads.length === 0 ? (
+              <EmptyState
+                icon={Archive}
+                title="No archived leads"
+                description="Leads you move to History will appear here. You can restore them anytime."
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                      <th className="px-4 py-3 text-left">Lead</th>
+                      <th className="px-4 py-3 text-left">Contact</th>
+                      {isMgmt && <th className="px-4 py-3 text-left">Assigned To</th>}
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Archived</th>
+                      <th className="px-4 py-3 text-left">Reason</th>
+                      {isMgmt && <th className="px-4 py-3 text-left">Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {archivedLeads.map(lead => (
+                      <tr key={lead._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-gray-900">{lead.name}</div>
+                          {lead.company && (
+                            <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+                              <Building2 className="h-3 w-3" />{lead.company}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isEmployee ? (
+                            <span className="text-xs text-gray-400">Hidden</span>
+                          ) : (
+                            <>
+                              {lead.phone && (
+                                <div className="flex items-center gap-1 text-xs text-gray-600">
+                                  <Phone className="h-3 w-3" />{lead.phone}
+                                </div>
+                              )}
+                              {lead.email && (
+                                <div className="flex items-center gap-1 text-xs text-gray-600">
+                                  <Mail className="h-3 w-3" />{lead.email}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </td>
+                        {isMgmt && (
+                          <td className="px-4 py-3 text-xs text-gray-600">
+                            {lead.assignedTo?.fullName || <span className="text-orange-500">Unassigned</span>}
+                          </td>
+                        )}
+                        <td className="px-4 py-3"><StatusBadge status={lead.status} /></td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {lead.archivedAt ? new Date(lead.archivedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                        </td>
+                        <td className="px-4 py-3 max-w-xs">
+                          <p className="text-xs text-gray-500 truncate">{lead.archiveReason || '—'}</p>
+                        </td>
+                        {isMgmt && (
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => handleRestore(lead._id)}
+                              className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-800 font-medium border border-emerald-200 rounded px-2 py-1 hover:bg-emerald-50 transition-colors"
+                              title="Restore to active leads"
+                            >
+                              <ArchiveRestore className="h-3.5 w-3.5" /> Restore
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {archivedTotalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3">
+                <p className="text-sm text-gray-500">
+                  {archivedTotal} archived lead{archivedTotal !== 1 ? 's' : ''} · Page {archivedPage} of {archivedTotalPages}
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setArchivedPage(p => Math.max(1, p - 1))} disabled={archivedPage === 1} className="btn-secondary py-1 px-2">
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => setArchivedPage(p => Math.min(archivedTotalPages, p + 1))} disabled={archivedPage === archivedTotalPages} className="btn-secondary py-1 px-2">
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/*
@@ -1358,6 +1585,8 @@ export default function SalesLeads() {
           onReveal={handleReveal}
           onClearReveal={clearReveal}
           newLeadsCount={newLeadsCount}
+          onArchive={handleArchive}
+          archiving={archiving}
         />
       )}
 
