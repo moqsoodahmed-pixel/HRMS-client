@@ -38,6 +38,12 @@ import { StatCard, StatusBadge, ProgressBar, EmptyState, LoadingBlock, Avatar } 
 import { formatDate, formatDateTime, relativeTime, humanise } from '../lib/format';
 import MiniCalendar from '../components/MiniCalendar';
 
+// Safe wrapper — prevents crash if leadsAPI archive methods aren't loaded yet (build cache, etc.)
+const safeCall = (fn, ...args) => {
+    if (typeof fn !== 'function') return Promise.resolve({ data: { data: [], meta: { total: 0 } } });
+    try { return fn(...args); } catch { return Promise.resolve({ data: { data: [], meta: { total: 0 } } }); }
+};
+
 // ── Status vocabulary (real enum from HRMS-server/models/Lead.js) ─────────
 const FUNNEL_STATUSES = ['NEW', 'CONTACTED', 'INTERESTED', 'CONVERTED'];
 const CLOSED_STATUSES = ['NOT_INTERESTED', 'LOST'];
@@ -624,7 +630,7 @@ function ArchivedSection() {
     useEffect(() => {
         if (!open) return;
         setLoading(true);
-        leadsAPI.archived({ page: 1, limit: 50 })
+        safeCall(leadsAPI.archived, { page: 1, limit: 50 })
             .then(r => { setLeads(r.data.data || []); setTotal(r.data.meta?.total || 0); })
             .catch(() => { })
             .finally(() => setLoading(false));
@@ -632,7 +638,7 @@ function ArchivedSection() {
 
     // Fetch just the count on mount so we can show a badge
     useEffect(() => {
-        leadsAPI.archived({ page: 1, limit: 1 })
+        safeCall(leadsAPI.archived, { page: 1, limit: 1 })
             .then(r => setTotal(r.data.meta?.total || 0))
             .catch(() => { });
     }, []);

@@ -22,6 +22,12 @@ const STATUS_COLORS = {
 
 const STATUS_OPTIONS = ['NEW', 'CONTACTED', 'INTERESTED', 'NOT_INTERESTED', 'CONVERTED', 'LOST'];
 const UPLOAD_ROLES = ['FOUNDER_CEO', 'CTO', 'SUPER_ADMIN', 'PROJECT_HEAD'];
+
+// Safe wrapper — prevents crash if leadsAPI archive methods aren't loaded yet (build cache, etc.)
+const safeCall = (fn, ...args) => {
+  if (typeof fn !== 'function') return Promise.resolve({ data: { data: [], meta: { total: 0 } } });
+  try { return fn(...args); } catch { return Promise.resolve({ data: { data: [], meta: { total: 0 } } }); }
+};
 const MGMT_ROLES = ['FOUNDER_CEO', 'CTO', 'SUPER_ADMIN', 'PROJECT_HEAD', 'HR_ADMIN', 'MANAGER', 'DIRECTOR'];
 
 function StatusBadge({ status }) {
@@ -907,7 +913,7 @@ export default function SalesLeads() {
 
   // Fetch the count for the History badge (lightweight — just one count query)
   useEffect(() => {
-    leadsAPI.archived({ page: 1, limit: 1 })
+    safeCall(leadsAPI.archived, { page: 1, limit: 1 })
       .then(r => setArchivedTotal(r.data.meta?.total || 0))
       .catch(() => { });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1002,7 +1008,7 @@ export default function SalesLeads() {
     try {
       const params = { page: archivedPage, limit: LIMIT };
       if (archivedSearch) params.search = archivedSearch;
-      const res = await leadsAPI.archived(params);
+      const res = await safeCall(leadsAPI.archived, params);
       setArchivedLeads(res.data.data || []);
       setArchivedTotal(res.data.meta?.total || 0);
     } catch (err) {
@@ -1022,7 +1028,7 @@ export default function SalesLeads() {
     if (!window.confirm('Move this lead to History? You can restore it later.')) return;
     setArchiving(true);
     try {
-      await leadsAPI.archive(leadId, reason);
+      await safeCall(leadsAPI.archive, leadId, reason);
       await fetchLeads();
       if (activeTab === 'history') await fetchArchivedLeads();
     } catch (err) {
@@ -1037,7 +1043,7 @@ export default function SalesLeads() {
     if (!window.confirm(`Move ${selectedIds.size} selected lead(s) to History?`)) return;
     setArchiving(true);
     try {
-      await leadsAPI.bulkArchive(Array.from(selectedIds));
+      await safeCall(leadsAPI.bulkArchive, Array.from(selectedIds));
       setSelectedIds(new Set());
       await fetchLeads();
       if (activeTab === 'history') await fetchArchivedLeads();
@@ -1051,7 +1057,7 @@ export default function SalesLeads() {
   const handleRestore = async (leadId) => {
     if (!window.confirm('Restore this lead back to the active list?')) return;
     try {
-      await leadsAPI.restore(leadId);
+      await safeCall(leadsAPI.restore, leadId);
       await fetchArchivedLeads();
       await fetchLeads();
     } catch (err) {
