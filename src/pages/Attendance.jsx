@@ -70,7 +70,16 @@ function SelfAttendanceWidget({ title = 'Today' }) {
     return () => clearInterval(id);
   }, []);
 
-  const todayQuery = useQuery({ queryKey: ['attendance', 'today'], queryFn: () => attendanceAPI.today() });
+  const todayQuery = useQuery({
+    queryKey: ['attendance', 'today'],
+    queryFn: () => attendanceAPI.today(),
+    // Poll every 30 s so the break button stays in sync on devices that
+    // checked in and then switched tabs or browsers — without this, the
+    // button relied on a manual refetch after check-in and would stay
+    // hidden if the cache was stale (the root cause of the sales-team issue).
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
   const myToday = todayQuery.data?.data?.data;
 
   const refreshAll = () => {
@@ -406,7 +415,6 @@ function RequestModal({ open, onClose, onSaved }) {
 /* ------------------------------------------------------------------ */
 
 function AttendanceManagementView() {
-  const { role } = useAuth();
   // Deep-link support: the dashboard's Present/Absent/Attendance stat tiles
   // (pages/Dashboard.jsx) link here as e.g. /attendance?tab=history&date=...
   // so clicking one actually lands on the attendance list for that day
@@ -447,11 +455,13 @@ function AttendanceManagementView() {
     <div>
       <PageHeader title="Employee Attendance" subtitle="Dashboard / Attendance / Employee records" />
 
-      {/* HR is also an employee with their own shift to work — this view used
-          to only manage OTHER people's attendance and had no way for HR
-          themselves to check in/out or take a break. Reuses the same
-          self-service widget every other employee gets on this page. */}
-      {['HR_ADMIN', 'MANAGER', 'PROJECT_HEAD', 'IT_HEAD'].includes(role) && <SelfAttendanceWidget title="My attendance today" />}
+      {/* Every role that reaches this management view is still an employee
+          who needs to check in/out and take a break. The previous hardcoded
+          list ['HR_ADMIN', 'MANAGER', 'PROJECT_HEAD', 'IT_HEAD'] excluded
+          DIRECTOR (and any future role granted viewAllAttendance), so those
+          users had no widget at all. Removed the role guard — anyone who
+          lands here gets the widget. */}
+      <SelfAttendanceWidget title="My attendance today" />
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>
