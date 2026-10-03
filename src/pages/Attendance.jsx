@@ -73,11 +73,17 @@ function SelfAttendanceWidget({ title = 'Today' }) {
   const todayQuery = useQuery({
     queryKey: ['attendance', 'today'],
     queryFn: () => attendanceAPI.today(),
-    // Poll every 30 s so the break button stays in sync on devices that
-    // checked in and then switched tabs or browsers — without this, the
-    // button relied on a manual refetch after check-in and would stay
-    // hidden if the cache was stale (the root cause of the sales-team issue).
+    // Never treat today's attendance as fresh — always re-fetch it in the
+    // background so check-in/break/check-out state stays in sync across
+    // tabs and devices without a manual page refresh.
+    staleTime: 0,
+    // Force a network round-trip every time the widget mounts (page
+    // navigation, app resume) so the data is never served from cache alone.
+    refetchOnMount: 'always',
+    // Poll every 30 s for devices that stay on this page for a long time.
     refetchInterval: 30_000,
+    // Refresh immediately when the employee switches back to this tab/window
+    // — the most common scenario for multi-device or multi-tab setups.
     refetchOnWindowFocus: true,
   });
   const myToday = todayQuery.data?.data?.data;
@@ -190,13 +196,35 @@ function SelfAttendanceWidget({ title = 'Today' }) {
           <button type="button" className="btn-primary" onClick={() => checkIn.mutate()} disabled={checkIn.isPending || Boolean(myToday.record?.checkIn)}>
             <LogIn className="h-4 w-4" /> Check in
           </button>
-          {/* Break start — only after check-in, before check-out, and break not yet taken */}
-          {!myToday.record?.breakStart && myToday.record?.checkIn && !myToday.record?.checkOut && (
-            <button type="button" className="btn-secondary" onClick={() => breakStart.mutate()} disabled={breakStart.isPending}>
+          {/* Break start — always shown while break is not yet started so
+              employees can see it exists; disabled with an explanation
+              when it's not the right moment (not checked in yet, or
+              already checked out). Previously this button was hidden
+              completely when conditions weren't met, which meant sales-
+              team employees on stale-cache devices never saw it and
+              checked out without taking their break. */}
+          {!myToday.record?.breakStart && !myToday.record?.breakEnd && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => breakStart.mutate()}
+              disabled={
+                breakStart.isPending
+                || !myToday.record?.checkIn
+                || Boolean(myToday.record?.checkOut)
+              }
+              title={
+                !myToday.record?.checkIn
+                  ? 'Check in first to start your break'
+                  : myToday.record?.checkOut
+                    ? 'You have already checked out — submit a correction request if you missed your break'
+                    : 'Start your break'
+              }
+            >
               <Coffee className="h-4 w-4" /> Start break
             </button>
           )}
-          {/* Break end — only while on break */}
+          {/* Break end — only while actively on break */}
           {myToday.record?.breakStart && !myToday.record?.breakEnd && (
             <button type="button" className="btn-secondary" onClick={() => breakEnd.mutate()} disabled={breakEnd.isPending}>
               <Coffee className="h-4 w-4" /> End break
