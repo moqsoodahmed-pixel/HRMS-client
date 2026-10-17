@@ -443,9 +443,10 @@ function LeadDrawer({ leadId, onClose, onUpdated, revealed, onReveal, onClearRev
 }
 
 // ── Lead list (table) ───────────────────────────────────────────────────
-function LeadRow({ lead, isRevealedRow, revealed, onReveal, onClearReveal, onOpen }) {
+function LeadRow({ lead, serialNo, isRevealedRow, revealed, onReveal, onClearReveal, onOpen }) {
     return (
         <tr className="cursor-pointer transition-colors hover:bg-gray-50" onClick={() => onOpen(lead)}>
+            <td className="px-4 py-3 text-xs font-medium text-gray-500">{serialNo}</td>
             <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
                     <Avatar name={lead.name} size="sm" />
@@ -703,6 +704,7 @@ export default function BDWorkspace({
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                                        <th className="px-4 py-3 text-left">S.No</th>
                                         <th className="px-4 py-3 text-left">Lead</th>
                                         <th className="px-4 py-3 text-left">Contact</th>
                                         <th className="px-4 py-3 text-left">Status</th>
@@ -713,9 +715,10 @@ export default function BDWorkspace({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {leads.map((lead) => (
+                                    {leads.map((lead, index) => (
                                         <LeadRow
                                             key={lead._id}
+                                            serialNo={(page - 1) * LIMIT + index + 1}
                                             lead={lead}
                                             isRevealedRow={revealed?.leadId === lead._id}
                                             revealed={revealed}
