@@ -111,6 +111,7 @@ function AppRoutes() {
       <Route path="/training" element={<Private access="/training"><Training /></Private>} />
       <Route path="/performance" element={<Private access="/performance"><Performance /></Private>} />
       <Route path="/exit" element={<Private access="/exit"><ExitProcess /></Private>} />
+      <Route path="/exit-process" element={<Navigate to="/exit" replace />} />
       <Route path="/reports" element={<Private access="/reports"><Reports /></Private>} />
       <Route path="/audit" element={<Private access="/audit"><AuditLogs /></Private>} />
       <Route path="/diagnostics" element={<Private access="/diagnostics"><DataHealth /></Private>} />

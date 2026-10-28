@@ -180,7 +180,35 @@ export const TRAINING_MATERIAL_TYPES = [
 
 export const PERFORMANCE_REVIEW_STATUSES = ['DRAFT', 'SUBMITTED', 'COMPLETED'];
 
-export const EXIT_REQUEST_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'COMPLETED'];
+export const EXIT_REQUEST_STATUSES = [
+  'PENDING', 'UNDER_REVIEW', 'CHANGES_REQUESTED', 'APPROVED', 'REJECTED', 'CANCELLED',
+  'OFFBOARDING_IN_PROGRESS', 'FNF_PROCESSING', 'COMPLETED'
+];
+
+export const EXIT_REASONS = [
+  'Better Opportunity',
+  'Higher Studies',
+  'Personal Reasons',
+  'Relocation',
+  'Medical',
+  'Family',
+  'Career Change',
+  'Business',
+  'Retirement',
+  'Other'
+];
+
+export const EXIT_TIMELINE_STAGES = [
+  { key: 'SUBMITTED', label: 'Submitted', description: 'Resignation submitted by employee' },
+  { key: 'MANAGER_REVIEW', label: 'Manager Review', description: 'Reporting Manager review & comments' },
+  { key: 'HR_REVIEW', label: 'HR Review', description: 'HR review & notice period confirmation' },
+  { key: 'LEADERSHIP_APPROVAL', label: 'Leadership Approval', description: 'Founder / CEO / CTO final decision' },
+  { key: 'APPROVED', label: 'Approved', description: 'Exit approved & notice period active' },
+  { key: 'OFFBOARDING_STARTED', label: 'Offboarding Started', description: 'Department checklist in progress' },
+  { key: 'ASSETS_RETURNED', label: 'Assets Returned', description: 'Hardware & access items verified' },
+  { key: 'FNF_PROCESSING', label: 'FNF Processing', description: 'Full & Final settlement calculation' },
+  { key: 'EXIT_COMPLETED', label: 'Exit Completed', description: 'Account disabled & documents released' },
+];
 export const RATING_LABELS = {
   1: 'Needs Improvement',
   2: 'Below Expectations',
@@ -200,8 +228,10 @@ export const STATUS_TONES = {
   // Attendance
   PRESENT: 'green', ABSENT: 'red', LATE: 'amber', HALF_DAY: 'purple',
   WORK_FROM_HOME: 'indigo', HOLIDAY: 'gray', WEEKEND: 'gray',
-  // Leave / documents / policies / payslips
+  // Leave / documents / policies / payslips / exits
   PENDING: 'amber', APPROVED: 'green', REJECTED: 'red', CANCELLED: 'gray',
+  UNDER_REVIEW: 'amber', CHANGES_REQUESTED: 'orange', OFFBOARDING_IN_PROGRESS: 'blue', FNF_PROCESSING: 'purple',
+  Returned: 'green', Damaged: 'red', Lost: 'red', Pending: 'amber',
   VERIFIED: 'green', ARCHIVED: 'gray',
   DRAFT: 'gray', PUBLISHED: 'green',
   GENERATED: 'blue', PAID: 'green',

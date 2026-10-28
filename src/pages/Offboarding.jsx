@@ -1,676 +1,974 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  UserMinus, ArrowLeft, Plus, CheckCircle2, Clock, ListChecks, AlertTriangle, Sparkles,
-  ShieldCheck, Laptop, Wallet, Package, ClipboardCheck, XCircle, CalendarClock,
+  UserMinus, CheckCircle2, Clock, ListChecks, AlertTriangle, ShieldCheck,
+  Laptop, Wallet, Package, ClipboardCheck, XCircle, CalendarClock, Download,
+  Send, UserCheck, AlertCircle, FileText, Ban, Building2, BellRing, Eye,
+  RefreshCw, Check, X, FileSignature
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { offboardingAPI, employeeAPI, exitRequestAPI } from '../api/axios';
+import { exitRequestAPI } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import {
-  PageHeader, StatCard, StatCardSkeleton, DataTable, FilterBar, SearchInput, Select,
-  Modal, FormField, StatusBadge, Avatar, EmptyState, ProgressBar, LoadingBlock, ErrorState, InfoRow, Tabs,
+  PageHeader, StatCard, DataTable, FilterBar, SearchInput, Select,
+  Modal, FormField, StatusBadge, Avatar, EmptyState, ProgressBar, LoadingBlock,
+  ErrorState, InfoRow, Tabs
 } from '../components/ui';
-import { TASK_STATUSES, TASK_CATEGORIES, DEPARTMENTS, EXIT_REQUEST_STATUSES } from '../constants';
-import { formatCurrency, formatDate, monthName, errorMessage, fieldErrors } from '../lib/format';
+import { DEPARTMENTS, EXIT_REQUEST_STATUSES } from '../constants';
+import { formatCurrency, formatDate, errorMessage } from '../lib/format';
 
 export default function Offboarding() {
-  const [tab, setTab] = useState('requests');
-  const [selected, setSelected] = useState(null);
-  const [initiating, setInitiating] = useState(false);
-
-  return (
-    <div>
-      <PageHeader title="Exit Management" subtitle="Manage and review employee exit requests" />
-      <Tabs
-        tabs={[{ value: 'requests', label: 'Exit Requests' }, { value: 'checklist', label: 'Offboarding Checklist' }]}
-        active={tab}
-        onChange={(v) => { setTab(v); setSelected(null); }}
-      />
-      {tab === 'requests' ? (
-        <ExitRequestsPanel onOpenChecklist={(emp) => { setTab('checklist'); setSelected(emp); }} />
-      ) : selected ? (
-        <OffboardingDetail employee={selected} onBack={() => setSelected(null)} />
-      ) : (
-        <>
-          <OffboardingOverview onSelect={setSelected} onInitiate={() => setInitiating(true)} />
-          <InitiateOffboardingModal open={initiating} onClose={() => setInitiating(false)} onStarted={(emp) => { setInitiating(false); setSelected(emp); }} />
-        </>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Exit Requests — employee-initiated (new, minimal — see STEP 10)      */
-/* ------------------------------------------------------------------ */
-
-function ExitRequestsPanel({ onOpenChecklist }) {
-  const { can } = useAuth();
-  const canDecide = can('manageLifecycle');
+  const { user, can } = useAuth();
+  const [selectedExit, setSelectedExit] = useState(null);
   const [filters, setFilters] = useState({ status: '', department: '', search: '' });
-  const [viewing, setViewing] = useState(null);
-  const [rejecting, setRejecting] = useState(null);
   const queryClient = useQueryClient();
 
-  const query = useQuery({ queryKey: ['exit-requests', filters], queryFn: () => exitRequestAPI.list(filters) });
+  const query = useQuery({
+    queryKey: ['exit-requests', filters],
+    queryFn: () => exitRequestAPI.list(filters),
+  });
+
   const rows = query.data?.data?.data || [];
-  const pending = rows.filter((r) => r.status === 'PENDING').length;
-  const approved = rows.filter((r) => r.status === 'APPROVED').length;
-  const completed = rows.filter((r) => r.status === 'COMPLETED').length;
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['exit-requests'] });
+  // Metrics
+  const total = rows.length;
+  const pending = rows.filter(r => ['PENDING', 'UNDER_REVIEW', 'CHANGES_REQUESTED'].includes(r.status)).length;
+  const inNotice = rows.filter(r => ['APPROVED', 'OFFBOARDING_IN_PROGRESS', 'FNF_PROCESSING'].includes(r.status)).length;
+  const completed = rows.filter(r => r.status === 'COMPLETED').length;
+  const assetsPendingCount = rows.filter(r => r.assetReturns?.some(a => a.status === 'Pending')).length;
+  const fnfPendingCount = rows.filter(r => r.status === 'APPROVED' && (!r.fnfDetails || r.fnfDetails.status !== 'PAID')).length;
 
-  const approve = useMutation({
-    mutationFn: (id) => exitRequestAPI.approve(id),
-    onSuccess: () => { toast.success('Exit approved — offboarding checklist created'); refresh(); setViewing(null); },
-    onError: (err) => toast.error(errorMessage(err)),
-  });
-  const reject = useMutation({
-    mutationFn: ({ id, reason }) => exitRequestAPI.reject(id, reason),
-    onSuccess: () => { toast.success('Exit request rejected'); refresh(); setRejecting(null); setViewing(null); },
-    onError: (err) => toast.error(errorMessage(err)),
-  });
-  const complete = useMutation({
-    mutationFn: (id) => exitRequestAPI.complete(id),
-    onSuccess: () => { toast.success('Exit marked complete'); refresh(); setViewing(null); },
-    onError: (err) => toast.error(errorMessage(err)),
-  });
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['exit-requests'] });
+  };
 
   return (
-    <div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Exit Requests" value={rows.length} icon={UserMinus} tone="indigo" onClick={() => setFilters((f) => ({ ...f, status: '' }))} />
-        <StatCard label="Pending" value={pending} icon={Clock} tone="amber" onClick={() => setFilters((f) => ({ ...f, status: 'PENDING' }))} />
-        <StatCard label="Approved (Notice Period)" value={approved} icon={CalendarClock} tone="blue" onClick={() => setFilters((f) => ({ ...f, status: 'APPROVED' }))} />
-        <StatCard label="Completed" value={completed} icon={CheckCircle2} tone="green" onClick={() => setFilters((f) => ({ ...f, status: 'COMPLETED' }))} />
-      </div>
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="Exit Management Hub"
+        subtitle="Manage end-to-end corporate employee separations, multi-level approvals, offboarding clearances, assets, FNF, and documents."
+      />
 
-      <div className="mt-6">
-        <FilterBar onReset={() => setFilters({ status: '', department: '', search: '' })}>
-          <SearchInput className="min-w-[14rem] flex-1" value={filters.search} onChange={(v) => setFilters({ ...filters, search: v })} placeholder="Search employee…" />
-          <div>
-            <label className="label">Department</label>
-            <Select className="w-44" value={filters.department} onChange={(e) => setFilters({ ...filters, department: e.target.value })} options={DEPARTMENTS} placeholder="All departments" />
-          </div>
-          <div>
-            <label className="label">Status</label>
-            <Select className="w-40" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} options={EXIT_REQUEST_STATUSES} placeholder="All statuses" />
-          </div>
-        </FilterBar>
-
-        <DataTable
-          columns={[
-            {
-              key: 'employee',
-              header: 'Employee',
-              render: (r) => (
-                <div className="flex items-center gap-3">
-                  <Avatar name={r.employee?.fullName} size="sm" />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-gray-900">{r.employee?.fullName}</p>
-                    <p className="truncate text-xs text-gray-400">{r.employee?.employeeCode}</p>
-                  </div>
-                </div>
-              ),
-            },
-            { key: 'department', header: 'Department', render: (r) => r.employee?.department },
-            { key: 'designation', header: 'Designation', render: (r) => r.employee?.designation },
-            { key: 'noticePeriod', header: 'Notice Period', render: (r) => (r.noticePeriodDays != null ? `${r.noticePeriodDays} days` : '—') },
-            { key: 'lastWorkingDate', header: 'Last Working Date', render: (r) => formatDate(r.requestedLastWorkingDate) },
-            { key: 'reason', header: 'Reason', render: (r) => <span className="block max-w-[10rem] truncate text-xs text-gray-500" title={r.reason}>{r.reason}</span> },
-            { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
-            {
-              key: 'actions',
-              header: 'Actions',
-              render: (r) => (
-                <div className="flex justify-end gap-2">
-                  <button type="button" className="text-xs font-medium text-primary-600 hover:underline" onClick={() => setViewing(r)}>View</button>
-                  {canDecide && r.status === 'PENDING' && (
-                    <>
-                      <button type="button" className="text-xs font-medium text-green-600 hover:underline" onClick={() => approve.mutate(r._id)} disabled={approve.isPending}>Approve</button>
-                      <button type="button" className="text-xs font-medium text-red-600 hover:underline" onClick={() => setRejecting(r)}>Reject</button>
-                    </>
-                  )}
-                  {canDecide && r.status === 'APPROVED' && (
-                    <button type="button" className="text-xs font-medium text-primary-600 hover:underline" onClick={() => complete.mutate(r._id)} disabled={complete.isPending}>Mark Complete</button>
-                  )}
-                </div>
-              ),
-            },
-          ]}
-          rows={rows}
-          isLoading={query.isLoading}
-          error={query.error}
-          onRetry={query.refetch}
-          empty={<EmptyState icon={UserMinus} title="No exit requests" description="Employee-submitted exit requests will appear here." />}
+      {/* KPI Stats Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <StatCard
+          label="Total Exits"
+          value={total}
+          icon={UserMinus}
+          tone="indigo"
+          onClick={() => setFilters(f => ({ ...f, status: '' }))}
+        />
+        <StatCard
+          label="Pending Review"
+          value={pending}
+          icon={Clock}
+          tone="amber"
+          onClick={() => setFilters(f => ({ ...f, status: 'PENDING' }))}
+        />
+        <StatCard
+          label="In Notice Period"
+          value={inNotice}
+          icon={CalendarClock}
+          tone="blue"
+          onClick={() => setFilters(f => ({ ...f, status: 'APPROVED' }))}
+        />
+        <StatCard
+          label="Assets Pending"
+          value={assetsPendingCount}
+          icon={Package}
+          tone="orange"
+        />
+        <StatCard
+          label="FNF Pending"
+          value={fnfPendingCount}
+          icon={Wallet}
+          tone="purple"
+        />
+        <StatCard
+          label="Completed"
+          value={completed}
+          icon={CheckCircle2}
+          tone="green"
+          onClick={() => setFilters(f => ({ ...f, status: 'COMPLETED' }))}
         />
       </div>
 
-      <Modal open={Boolean(viewing)} onClose={() => setViewing(null)} title={viewing ? `Exit Request — ${viewing.employee?.fullName}` : ''} size="md">
-        {viewing && (
-          <div className="space-y-4 p-5">
-            <div className="grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-4">
-              <InfoRow label="Department" value={viewing.employee?.department} />
-              <InfoRow label="Designation" value={viewing.employee?.designation} />
-              <InfoRow label="Notice Period" value={viewing.noticePeriodDays != null ? `${viewing.noticePeriodDays} days` : '—'} />
-              <InfoRow label="Last Working Date" value={formatDate(viewing.requestedLastWorkingDate)} />
-              <InfoRow label="Status" value={<StatusBadge status={viewing.status} />} />
-              <InfoRow label="Submitted" value={formatDate(viewing.createdAt)} />
-            </div>
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Reason</p>
-              <p className="text-sm text-gray-700">{viewing.reason}</p>
-            </div>
-            {viewing.comments && (
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Comments</p>
-                <p className="text-sm text-gray-700">{viewing.comments}</p>
-              </div>
-            )}
-            {viewing.status === 'REJECTED' && viewing.rejectionReason && (
-              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{viewing.rejectionReason}</p>
-            )}
-            {viewing.status === 'APPROVED' && (
-              <button type="button" className="text-sm font-medium text-primary-600 hover:underline" onClick={() => onOpenChecklist(viewing.employee)}>
-                Open offboarding checklist →
-              </button>
-            )}
-            {canDecide && viewing.status === 'PENDING' && (
-              <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
-                <button type="button" className="btn-danger" onClick={() => setRejecting(viewing)}><XCircle className="h-4 w-4" /> Reject</button>
-                <button type="button" className="btn-primary" onClick={() => approve.mutate(viewing._id)} disabled={approve.isPending}><CheckCircle2 className="h-4 w-4" /> Approve</button>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
-
-      <Modal open={Boolean(rejecting)} onClose={() => setRejecting(null)} title="Reject exit request" size="sm">
-        <form
-          className="space-y-4 p-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const reason = new FormData(e.target).get('reason')?.toString().trim();
-            if (!reason) { toast.error('A reason is required.'); return; }
-            reject.mutate({ id: rejecting._id, reason });
-          }}
-        >
-          <FormField label="Reason" required>
-            <textarea name="reason" className="input min-h-[80px]" />
-          </FormField>
-          <div className="flex justify-end gap-3">
-            <button type="button" className="btn-secondary" onClick={() => setRejecting(null)}>Cancel</button>
-            <button type="submit" className="btn-danger" disabled={reject.isPending}>{reject.isPending ? 'Rejecting…' : 'Reject'}</button>
-          </div>
-        </form>
-      </Modal>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-
-function OffboardingOverview({ onSelect, onInitiate }) {
-  const { can } = useAuth();
-  const [filters, setFilters] = useState({ search: '', department: '', status: '' });
-  const query = useQuery({
-    queryKey: ['offboarding', 'overview', filters],
-    queryFn: () => offboardingAPI.overview(filters),
-  });
-  const rows = query.data?.data?.data || [];
-  const meta = query.data?.data?.meta;
-
-  return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-gray-500">Exit formalities, clearances and final settlement checklist</p>
-        {can('manageLifecycle') && (
-          <button type="button" className="btn-primary" onClick={onInitiate}>
-            <Plus className="h-4 w-4" /> Initiate offboarding
-          </button>
-        )}
-      </div>
-
-      {query.isLoading ? <StatCardSkeleton count={4} /> : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard label="Total Exiting" value={meta?.total ?? 0} icon={UserMinus} tone="indigo" onClick={() => setFilters((f) => ({ ...f, status: '' }))} />
-          <StatCard label="Not Started" value={meta?.notStarted ?? 0} icon={Clock} tone="gray" onClick={() => setFilters((f) => ({ ...f, status: 'NOT_STARTED' }))} />
-          <StatCard label="In Progress" value={meta?.inProgress ?? 0} icon={ListChecks} tone="amber" onClick={() => setFilters((f) => ({ ...f, status: 'IN_PROGRESS' }))} />
-          <StatCard label="Completed" value={meta?.completed ?? 0} icon={CheckCircle2} tone="green" onClick={() => setFilters((f) => ({ ...f, status: 'COMPLETED' }))} />
-        </div>
-      )}
-
-      <div className="mt-6">
-        <FilterBar onReset={() => setFilters({ search: '', department: '', status: '' })}>
-          <SearchInput className="min-w-[14rem] flex-1" value={filters.search} onChange={(v) => setFilters({ ...filters, search: v })} placeholder="Search employee…" />
+      {/* Filter and Search Bar */}
+      <div className="card p-4">
+        <FilterBar onReset={() => setFilters({ status: '', department: '', search: '' })}>
+          <SearchInput
+            className="min-w-[14rem] flex-1"
+            value={filters.search}
+            onChange={(v) => setFilters({ ...filters, search: v })}
+            placeholder="Search employee by name or ID code…"
+          />
           <div>
             <label className="label">Department</label>
-            <Select className="w-44" value={filters.department} onChange={(e) => setFilters({ ...filters, department: e.target.value })} options={DEPARTMENTS} placeholder="All departments" />
+            <Select
+              className="w-44"
+              value={filters.department}
+              onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+              options={DEPARTMENTS}
+              placeholder="All departments"
+            />
           </div>
           <div>
-            <label className="label">Progress</label>
+            <label className="label">Status</label>
             <Select
-              className="w-40"
+              className="w-44"
               value={filters.status}
               onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              options={[{ value: 'NOT_STARTED', label: 'Not started' }, { value: 'IN_PROGRESS', label: 'In progress' }, { value: 'COMPLETED', label: 'Completed' }]}
-              placeholder="All"
+              options={EXIT_REQUEST_STATUSES}
+              placeholder="All statuses"
             />
           </div>
         </FilterBar>
 
-        <DataTable
-          columns={[
-            {
-              key: 'employee',
-              header: 'Employee',
-              render: (row) => (
-                <div className="flex items-center gap-3">
-                  <Avatar name={row.employee?.fullName} size="sm" />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-gray-900">{row.employee?.fullName}</p>
-                    <p className="truncate text-xs text-gray-400">{row.employee?.employeeCode} · {row.employee?.department}</p>
-                  </div>
-                </div>
-              ),
-            },
-            { key: 'exitDate', header: 'Exit Date', render: (row) => formatDate(row.employee?.dateOfExit) },
-            { key: 'reason', header: 'Reason', render: (row) => <span className="block max-w-[12rem] truncate text-xs text-gray-500" title={row.employee?.exitReason}>{row.employee?.exitReason || '—'}</span> },
-            {
-              key: 'progress',
-              header: 'Progress',
-              className: 'min-w-[10rem]',
-              render: (row) => <ProgressBar value={row.progress.percent} tone={row.progress.percent === 100 ? 'green' : 'amber'} label={`${row.progress.completed}/${row.progress.total} tasks`} />,
-            },
-            { key: 'overdue', header: 'Overdue', render: (row) => row.overdue > 0 ? <span className="flex items-center gap-1 text-xs font-medium text-red-600"><AlertTriangle className="h-3.5 w-3.5" /> {row.overdue}</span> : <span className="text-gray-300">—</span> },
-            { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.state} /> },
-            {
-              key: 'actions',
-              header: '',
-              render: (row) => (
-                <button type="button" className="text-xs font-medium text-primary-600 hover:underline" onClick={() => onSelect(row.employee)}>
-                  Open checklist
-                </button>
-              ),
-            },
-          ]}
-          rows={rows}
-          rowKey={(row) => row.employee._id}
-          isLoading={query.isLoading}
-          error={query.error}
-          onRetry={query.refetch}
-          onRowClick={(row) => onSelect(row.employee)}
-          empty={<EmptyState icon={UserMinus} title="No one is currently offboarding" description="Employees serving notice or with an exit date appear here." />}
-        />
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-
-function OffboardingDetail({ employee, onBack }) {
-  const { can } = useAuth();
-  const queryClient = useQueryClient();
-  const [filters, setFilters] = useState({ status: '', search: '' });
-  const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState(null);
-
-  const tasksQuery = useQuery({
-    queryKey: ['offboarding', 'employee', employee._id],
-    queryFn: () => offboardingAPI.forEmployee(employee._id),
-  });
-  const clearanceQuery = useQuery({
-    queryKey: ['offboarding', 'clearance', employee._id],
-    queryFn: () => offboardingAPI.clearance(employee._id),
-  });
-
-  const tasks = tasksQuery.data?.data?.data || [];
-  const progress = tasksQuery.data?.data?.meta?.progress;
-  const clearance = clearanceQuery.data?.data?.data;
-
-  const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['offboarding'] });
-    queryClient.invalidateQueries({ queryKey: ['reports'] });
-  };
-
-  const applyTemplate = useMutation({
-    mutationFn: () => offboardingAPI.applyTemplate(employee._id),
-    onSuccess: (res) => { toast.success(res.data.message || 'Checklist applied'); refresh(); },
-    onError: (err) => toast.error(errorMessage(err, 'Could not apply the standard checklist.')),
-  });
-
-  const updateTask = useMutation({
-    mutationFn: ({ id, data }) => offboardingAPI.updateTask(id, data),
-    onSuccess: () => { toast.success('Task updated'); refresh(); },
-    onError: (err) => toast.error(errorMessage(err)),
-  });
-
-  const visible = tasks.filter((t) => {
-    if (filters.status && t.status !== filters.status) return false;
-    if (filters.search && !t.taskName.toLowerCase().includes(filters.search.toLowerCase())) return false;
-    return true;
-  });
-
-  const isOverdue = (t) => t.status !== 'COMPLETED' && t.dueDate && new Date(t.dueDate) < new Date();
-
-  const clearanceItems = clearance ? [
-    { key: 'hr', label: 'HR Clearance', icon: ShieldCheck, status: clearance.clearances.hr },
-    { key: 'it', label: 'IT Clearance', icon: Laptop, status: clearance.clearances.it },
-    { key: 'finance', label: 'Finance Clearance', icon: Wallet, status: clearance.clearances.finance },
-    { key: 'assets', label: 'Asset Return', icon: Package, status: clearance.clearances.assets },
-  ] : [];
-
-  return (
-    <div>
-      <div className="mb-6 flex items-center gap-3">
-        <button type="button" className="btn-ghost" onClick={onBack}><ArrowLeft className="h-5 w-5" /></button>
-        <div className="flex items-center gap-3">
-          <Avatar name={employee.fullName} />
-          <div>
-            <h1 className="page-title">{employee.fullName}</h1>
-            <p className="page-subtitle">
-              {employee.designation} · {employee.department} · Exit {formatDate(employee.dateOfExit)}
-              {employee.exitReason ? ` · ${employee.exitReason}` : ''}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {tasksQuery.isLoading ? <LoadingBlock label="Loading checklist…" /> : tasksQuery.error ? (
-        <div className="card"><ErrorState error={tasksQuery.error} onRetry={tasksQuery.refetch} /></div>
-      ) : (
-        <>
-          <div className="card mb-6 p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex-1">
-                <p className="mb-2 text-sm font-medium text-gray-700">Overall progress</p>
-                <ProgressBar value={progress?.percent || 0} tone={progress?.percent === 100 ? 'green' : 'amber'} />
-              </div>
-              <div className="flex gap-6 text-center">
-                <MiniStat label="Completed" value={progress?.completed ?? 0} tone="text-green-600" />
-                <MiniStat label="Pending" value={progress?.pending ?? 0} tone="text-amber-600" />
-                <MiniStat label="Blocked" value={progress?.blocked ?? 0} tone="text-red-600" />
-              </div>
-            </div>
-          </div>
-
-          {/* Clearance snapshot */}
-          <div className="card mb-6 p-5">
-            <div className="mb-4 flex items-center gap-2">
-              <ClipboardCheck className="h-4 w-4 text-gray-400" />
-              <h2 className="section-title">Clearance status</h2>
-            </div>
-            {clearanceQuery.isLoading ? (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 animate-pulse rounded-xl bg-gray-100" />)}</div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  {clearanceItems.map((item) => (
-                    <div key={item.key} className="rounded-xl border border-gray-100 p-4">
-                      <div className="mb-2 flex items-center gap-2 text-gray-500"><item.icon className="h-4 w-4" /><span className="text-xs font-medium">{item.label}</span></div>
-                      <StatusBadge status={item.status} />
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <InfoRow label="Documents pending" value={clearance?.documentsPending ?? 0} />
-                  <InfoRow label="Assets outstanding" value={clearance?.assetsOutstanding?.length ?? 0} />
-                  <InfoRow
-                    label="Final payroll"
-                    value={clearance?.finalPayroll
-                      ? `${monthName(clearance.finalPayroll.month)} ${clearance.finalPayroll.year} — ${formatCurrency(clearance.finalPayroll.netSalary)} (${clearance.finalPayroll.status})`
-                      : 'Not yet processed'}
-                  />
-                </div>
-                {clearance?.assetsOutstanding?.length > 0 && (
-                  <p className="mt-3 text-xs text-amber-700">
-                    Outstanding: {clearance.assetsOutstanding.map((a) => a.name).join(', ')}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div className="flex flex-wrap items-end gap-3">
-              <SearchInput className="w-56" value={filters.search} onChange={(v) => setFilters({ ...filters, search: v })} placeholder="Search tasks…" />
-              <div>
-                <label className="label">Status</label>
-                <Select className="w-40" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} options={TASK_STATUSES} placeholder="All statuses" />
-              </div>
-            </div>
-            {can('manageLifecycle') && (
-              <div className="flex gap-2">
-                {tasks.length === 0 && (
-                  <button type="button" className="btn-secondary" onClick={() => applyTemplate.mutate()} disabled={applyTemplate.isPending}>
-                    <Sparkles className="h-4 w-4" /> {applyTemplate.isPending ? 'Applying…' : 'Apply standard checklist'}
-                  </button>
-                )}
-                <button type="button" className="btn-primary" onClick={() => setCreating(true)}>
-                  <Plus className="h-4 w-4" /> Add task
-                </button>
-              </div>
-            )}
-          </div>
-
+        {/* Data Table */}
+        <div className="mt-4">
           <DataTable
             columns={[
               {
-                key: 'task',
-                header: 'Task',
-                render: (t) => (
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-gray-900">{t.taskName}</p>
-                    {t.description && <p className="truncate text-xs text-gray-400">{t.description}</p>}
+                key: 'employee',
+                header: 'Employee',
+                render: (r) => (
+                  <div className="flex items-center gap-3">
+                    <Avatar name={r.employee?.fullName} size="sm" />
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-gray-900">{r.employee?.fullName}</p>
+                      <p className="truncate text-xs text-gray-400">{r.employee?.employeeCode}</p>
+                    </div>
                   </div>
                 ),
               },
-              { key: 'category', header: 'Category', render: (t) => t.category },
-              { key: 'assignedTo', header: 'Assigned To', render: (t) => <span className="text-xs text-gray-500">{t.assignedTo?.email || '—'}</span> },
               {
-                key: 'due',
-                header: 'Due Date',
-                render: (t) => (
-                  <span className={isOverdue(t) ? 'font-medium text-red-600' : ''}>
-                    {formatDate(t.dueDate)} {isOverdue(t) && <AlertTriangle className="ml-1 inline h-3.5 w-3.5" />}
+                key: 'department',
+                header: 'Department / Role',
+                render: (r) => (
+                  <div>
+                    <span className="font-medium text-gray-800">{r.employee?.department || '—'}</span>
+                    <span className="block text-[11px] text-gray-400">{r.employee?.designation || '—'}</span>
+                  </div>
+                ),
+              },
+              {
+                key: 'manager',
+                header: 'Reporting Manager',
+                render: (r) => r.employee?.manager?.fullName || 'Assigned Manager',
+              },
+              {
+                key: 'lwd',
+                header: 'Last Working Day',
+                render: (r) => (
+                  <div>
+                    <span className="font-semibold text-gray-900">
+                      {formatDate(r.confirmedLastWorkingDate || r.requestedLastWorkingDate)}
+                    </span>
+                    <span className="block text-[11px] text-gray-400">
+                      {r.noticePeriodDays || 30}d notice {r.noticeShortfallDays > 0 ? `(${r.noticeShortfallDays}d shortfall)` : ''}
+                    </span>
+                  </div>
+                ),
+              },
+              {
+                key: 'reason',
+                header: 'Reason',
+                render: (r) => (
+                  <span className="block max-w-[9rem] truncate text-xs text-gray-600" title={r.reason}>
+                    {r.reason}
                   </span>
                 ),
               },
-              { key: 'completed', header: 'Completed', render: (t) => formatDate(t.completedAt) },
+              {
+                key: 'approvalStage',
+                header: 'Current Stage',
+                render: (r) => (
+                  <span className="text-[11px] font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                    {r.currentApprovalStage ? r.currentApprovalStage.replace(/_/g, ' ') : 'Pending'}
+                  </span>
+                ),
+              },
               {
                 key: 'status',
                 header: 'Status',
-                render: (t) => (
-                  <Select
-                    className="w-36 py-1 text-xs"
-                    value={t.status}
-                    onChange={(e) => updateTask.mutate({ id: t._id, data: { status: e.target.value } })}
-                    options={TASK_STATUSES}
-                  />
+                render: (r) => <StatusBadge status={r.status} />,
+              },
+              {
+                key: 'actions',
+                header: 'Action',
+                render: (r) => (
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      className="btn-primary text-xs py-1 px-3 flex items-center gap-1 shadow-none"
+                      onClick={() => setSelectedExit(r)}
+                    >
+                      <Eye className="h-3.5 w-3.5" /> Manage
+                    </button>
+                  </div>
                 ),
               },
-              ...(can('manageLifecycle') ? [{
-                key: 'actions',
-                header: '',
-                render: (t) => (
-                  <button type="button" className="text-xs font-medium text-primary-600 hover:underline" onClick={() => setEditing(t)}>Edit</button>
-                ),
-              }] : []),
             ]}
-            rows={visible}
-            isLoading={false}
+            rows={rows}
+            isLoading={query.isLoading}
+            error={query.error}
+            onRetry={query.refetch}
             empty={
               <EmptyState
-                icon={ListChecks}
-                title="No offboarding tasks yet"
-                description="Apply the standard checklist or add tasks manually."
-                action={can('manageLifecycle') ? (
-                  <button type="button" className="btn-primary" onClick={() => applyTemplate.mutate()} disabled={applyTemplate.isPending}>
-                    <Sparkles className="h-4 w-4" /> Apply standard checklist
-                  </button>
-                ) : null}
+                icon={UserMinus}
+                title="No exit requests found"
+                description="Employee-submitted resignations and separation workflows will appear here."
               />
             }
           />
-        </>
+        </div>
+      </div>
+
+      {/* COMPREHENSIVE EXIT MANAGEMENT MODAL */}
+      {selectedExit && (
+        <ExitManagementModal
+          exitId={selectedExit._id}
+          onClose={() => setSelectedExit(null)}
+          onChanged={() => {
+            refresh();
+          }}
+        />
       )}
-
-      <TaskFormModal
-        open={creating || Boolean(editing)}
-        task={editing}
-        employeeId={employee._id}
-        onClose={() => { setCreating(false); setEditing(null); }}
-        onSaved={refresh}
-        createFn={offboardingAPI.createTask}
-        updateFn={offboardingAPI.updateTask}
-      />
     </div>
   );
 }
 
-function MiniStat({ label, value, tone }) {
-  return (
-    <div>
-      <p className={`text-xl font-bold ${tone}`}>{value}</p>
-      <p className="text-xs text-gray-400">{label}</p>
-    </div>
-  );
-}
+/**
+ * COMPREHENSIVE EXIT MANAGEMENT MODAL
+ * Includes: Approval Engine, Offboarding Checklist, Assets, FNF, Documents, Complete Exit
+ */
+function ExitManagementModal({ exitId, onClose, onChanged }) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState('approval');
 
-function TaskFormModal({ open, task, employeeId, onClose, onSaved, createFn, updateFn }) {
-  const isEdit = Boolean(task);
-  const empty = { taskName: '', description: '', category: '', dueDate: '', status: 'TODO', isRequired: true };
-  const [form, setForm] = useState(empty);
-  const [errors, setErrors] = useState({});
-  const [loadedFor, setLoadedFor] = useState(null);
+  // Fetch full details
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['exit-request', exitId],
+    queryFn: () => exitRequestAPI.get(exitId),
+  });
 
-  if (open && isEdit && loadedFor !== task._id) {
-    setForm({
-      taskName: task.taskName, description: task.description || '', category: task.category,
-      dueDate: task.dueDate?.slice(0, 10) || '', status: task.status, isRequired: task.isRequired !== false,
-    });
-    setLoadedFor(task._id);
+  const exit = data?.data?.data;
+  const emp = exit?.employee;
+
+  // Review stage mutation
+  const [reviewForm, setReviewForm] = useState({
+    stage: 'HR',
+    action: 'APPROVE',
+    notes: '',
+    internalComments: '',
+    confirmedLastWorkingDate: '',
+    overrideNoticePeriodDays: '',
+    noticeWaiverApproved: false,
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: (body) => exitRequestAPI.reviewStage(exitId, body),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Approval decision recorded successfully.');
+      refetch();
+      onChanged();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  // Checklist update mutation
+  const checklistMutation = useMutation({
+    mutationFn: (body) => exitRequestAPI.updateChecklist(exitId, body),
+    onSuccess: () => {
+      toast.success('Checklist updated');
+      refetch();
+      onChanged();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  // Asset status mutation
+  const assetMutation = useMutation({
+    mutationFn: (body) => exitRequestAPI.updateAsset(exitId, body),
+    onSuccess: () => {
+      toast.success('Asset status updated');
+      refetch();
+      onChanged();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  // Send asset reminder email
+  const reminderMutation = useMutation({
+    mutationFn: () => exitRequestAPI.sendAssetReminder(exitId),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Reminder sent to employee');
+      refetch();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  // FNF update mutation
+  const fnfMutation = useMutation({
+    mutationFn: (body) => exitRequestAPI.calculateFNF(exitId, body),
+    onSuccess: () => {
+      toast.success('FNF calculations updated');
+      refetch();
+      onChanged();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  // FNF approval mutation
+  const fnfApproveMutation = useMutation({
+    mutationFn: () => exitRequestAPI.approveFNF(exitId),
+    onSuccess: () => {
+      toast.success('FNF statement approved');
+      refetch();
+      onChanged();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  // FNF payment mutation
+  const [paymentRef, setPaymentRef] = useState('');
+  const fnfPayMutation = useMutation({
+    mutationFn: (body) => exitRequestAPI.recordFNFPayment(exitId, body),
+    onSuccess: () => {
+      toast.success('FNF payment recorded');
+      refetch();
+      onChanged();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  // Complete exit mutation
+  const completeMutation = useMutation({
+    mutationFn: () => exitRequestAPI.complete(exitId),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Exit completed. Account deactivated and separation letters issued.');
+      refetch();
+      onChanged();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  // Document download
+  const handleDownload = async (docType, docName) => {
+    try {
+      toast.loading(`Preparing ${docName}...`, { id: 'admin-doc' });
+      const res = await exitRequestAPI.downloadDocument(exitId, docType);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${docName.replace(/\s+/g, '_')}_${emp?.fullName || 'Employee'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success(`${docName} downloaded!`, { id: 'admin-doc' });
+    } catch (e) {
+      toast.error(errorMessage(e) || 'Failed to download document', { id: 'admin-doc' });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Modal open={true} onClose={onClose} title="Loading Exit Request" size="xl">
+        <div className="p-8"><LoadingBlock label="Fetching exit record..." /></div>
+      </Modal>
+    );
   }
 
-  const save = useMutation({
-    mutationFn: (data) => (isEdit ? updateFn(task._id, data) : createFn({ ...data, employee: employeeId })),
-    onSuccess: () => { toast.success(isEdit ? 'Task updated' : 'Task added'); onSaved(); close(); },
-    onError: (err) => { setErrors(fieldErrors(err)); toast.error(errorMessage(err)); },
-  });
-
-  function close() { setForm(empty); setErrors({}); setLoadedFor(null); onClose(); }
-
-  const submit = (e) => {
-    e.preventDefault();
-    const next = {};
-    if (form.taskName.trim().length < 2) next.taskName = 'Give the task a name.';
-    if (!form.category) next.category = 'Choose a category.';
-    setErrors(next);
-    if (Object.keys(next).length) return;
-    save.mutate(form);
-  };
+  if (error || !exit) {
+    return (
+      <Modal open={true} onClose={onClose} title="Error" size="md">
+        <div className="p-6"><ErrorState error={error} onRetry={refetch} /></div>
+      </Modal>
+    );
+  }
 
   return (
-    <Modal open={open} onClose={close} title={isEdit ? 'Edit task' : 'Add task'}>
-      <form onSubmit={submit} className="space-y-4 p-5">
-        <FormField label="Task name" required error={errors.taskName}>
-          <input className="input" value={form.taskName} onChange={(e) => setForm({ ...form, taskName: e.target.value })} />
-        </FormField>
-        <FormField label="Description">
-          <textarea className="input min-h-[70px]" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-        </FormField>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField label="Category" required error={errors.category}>
-            <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={TASK_CATEGORIES} placeholder="Select" />
-          </FormField>
-          <FormField label="Due date">
-            <input type="date" className="input" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
-          </FormField>
+    <Modal
+      open={true}
+      onClose={onClose}
+      title={`Exit Management — ${emp?.fullName} (${emp?.employeeCode})`}
+      size="2xl"
+      description="Corporate separation management, multi-stage approval engine, clearances, asset recoveries, FNF, and documents."
+    >
+      <div className="space-y-6 p-6">
+        {/* Top Header Card */}
+        <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-3 mb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-gray-900">{emp?.fullName}</h3>
+                <StatusBadge status={exit.status} />
+                <span className="text-xs bg-primary-100 text-primary-800 font-bold px-2 py-0.5 rounded-full">
+                  {exit.currentApprovalStage ? exit.currentApprovalStage.replace(/_/g, ' ') : 'Pending'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {emp?.designation} &bull; {emp?.department} &bull; Official Email: {emp?.officialEmail}
+              </p>
+            </div>
+
+            <div className="text-right text-xs">
+              <span className="text-gray-400 block">Confirmed LWD</span>
+              <span className="font-bold text-gray-900 text-sm">
+                {formatDate(exit.confirmedLastWorkingDate || exit.requestedLastWorkingDate)}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <InfoRow label="Reason" value={exit.reason} />
+            <InfoRow label="Notice Period" value={`${exit.noticePeriodDays || 30} days`} />
+            <InfoRow label="Notice Shortfall" value={exit.noticeShortfallDays > 0 ? `${exit.noticeShortfallDays} days` : 'None'} />
+            <InfoRow label="Reporting Manager" value={emp?.manager?.fullName || 'Assigned Manager'} />
+          </div>
+
+          {exit.detailedComments && (
+            <div className="mt-3 pt-3 border-t border-gray-200 text-xs">
+              <span className="text-gray-400 block mb-0.5 font-medium">Employee Statement:</span>
+              <p className="text-gray-700 italic">{exit.detailedComments}</p>
+            </div>
+          )}
         </div>
-        {isEdit && (
-          <FormField label="Status">
-            <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={TASK_STATUSES} />
-          </FormField>
+
+        {/* Modal Navigation Tabs */}
+        <div className="flex border-b border-gray-200 space-x-4 text-xs font-semibold overflow-x-auto">
+          {[
+            { id: 'approval', label: 'Approval Workflow', icon: ShieldCheck },
+            { id: 'checklist', label: 'Offboarding Checklist', icon: ClipboardCheck },
+            { id: 'assets', label: 'Asset Return Register', icon: Package },
+            { id: 'fnf', label: 'FNF Payroll Settlement', icon: Wallet },
+            { id: 'documents', label: 'Exit Documents', icon: FileSignature },
+            { id: 'audit', label: 'Audit Trail & Logs', icon: Clock },
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 pb-2.5 pt-1 border-b-2 whitespace-nowrap transition-colors ${
+                tab === t.id
+                  ? 'border-primary-600 text-primary-600 font-bold'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <t.icon className="h-4 w-4" />
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* TAB 1: APPROVAL WORKFLOW ENGINE */}
+        {tab === 'approval' && (
+          <div className="space-y-6">
+            {/* Stages overview */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {exit.approvalStages?.map((stage, i) => (
+                <div
+                  key={stage._id || i}
+                  className={`p-3.5 rounded-lg border text-xs ${
+                    stage.status === 'APPROVED'
+                      ? 'border-green-200 bg-green-50/60'
+                      : stage.status === 'REJECTED'
+                      ? 'border-red-200 bg-red-50/60'
+                      : stage.status === 'CHANGES_REQUESTED'
+                      ? 'border-amber-200 bg-amber-50/60'
+                      : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="font-bold uppercase text-[10px] text-gray-500">Stage {i + 1}: {stage.stage}</span>
+                    <StatusBadge status={stage.status} />
+                  </div>
+                  <p className="font-bold text-gray-900">{stage.title}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    {stage.assignedToEmployee?.fullName ? `Assignee: ${stage.assignedToEmployee.fullName}` : `Role: ${stage.assignedRole}`}
+                  </p>
+                  {stage.actionAt && (
+                    <p className="text-[10px] text-gray-400 mt-1">Decided {formatDate(stage.actionAt)}</p>
+                  )}
+                  {stage.notes && (
+                    <p className="mt-2 p-2 bg-white rounded border border-gray-100 text-gray-700">
+                      <strong>Note:</strong> {stage.notes}
+                    </p>
+                  )}
+                  {stage.internalComments && (
+                    <p className="mt-1 p-2 bg-white rounded border border-gray-100 text-gray-600 italic">
+                      <strong>Internal:</strong> {stage.internalComments}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Approver Decision Form */}
+            {exit.status !== 'COMPLETED' && exit.status !== 'REJECTED' && exit.status !== 'CANCELLED' && (
+              <div className="card p-5 border border-primary-100 bg-white shadow-sm space-y-4">
+                <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-primary-600" /> Approver Decision Panel
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField label="Reviewing Stage">
+                    <select
+                      className="input text-xs"
+                      value={reviewForm.stage}
+                      onChange={(e) => setReviewForm({ ...reviewForm, stage: e.target.value })}
+                    >
+                      <option value="MANAGER">Reporting Manager Review</option>
+                      <option value="HR">HR Review</option>
+                      <option value="LEADERSHIP">Executive Leadership (Founder / CEO / CTO)</option>
+                    </select>
+                  </FormField>
+
+                  <FormField label="Decision Action">
+                    <select
+                      className="input text-xs font-bold"
+                      value={reviewForm.action}
+                      onChange={(e) => setReviewForm({ ...reviewForm, action: e.target.value })}
+                    >
+                      <option value="APPROVE">Approve Stage</option>
+                      <option value="REQUEST_CHANGES">Request Changes from Employee</option>
+                      <option value="REJECT">Reject Resignation</option>
+                    </select>
+                  </FormField>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField label="Override Last Working Day (Optional)">
+                    <input
+                      type="date"
+                      className="input text-xs"
+                      value={reviewForm.confirmedLastWorkingDate}
+                      onChange={(e) => setReviewForm({ ...reviewForm, confirmedLastWorkingDate: e.target.value })}
+                    />
+                  </FormField>
+
+                  <FormField label="Override Notice Period Days (Optional)">
+                    <input
+                      type="number"
+                      className="input text-xs"
+                      placeholder="e.g. 15 or 0"
+                      value={reviewForm.overrideNoticePeriodDays}
+                      onChange={(e) => setReviewForm({ ...reviewForm, overrideNoticePeriodDays: e.target.value })}
+                    />
+                  </FormField>
+                </div>
+
+                <FormField label="Public Notes (Visible to employee)">
+                  <textarea
+                    className="input text-xs min-h-[60px]"
+                    placeholder="Notes, next steps, or reasons for changes..."
+                    value={reviewForm.notes}
+                    onChange={(e) => setReviewForm({ ...reviewForm, notes: e.target.value })}
+                  />
+                </FormField>
+
+                <FormField label="Confidential Internal Comments (Audit & HR only)">
+                  <textarea
+                    className="input text-xs min-h-[60px]"
+                    placeholder="Confidential notes regarding replacement, handover, or severance..."
+                    value={reviewForm.internalComments}
+                    onChange={(e) => setReviewForm({ ...reviewForm, internalComments: e.target.value })}
+                  />
+                </FormField>
+
+                <div className="flex justify-between items-center pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={reviewForm.noticeWaiverApproved}
+                      onChange={(e) => setReviewForm({ ...reviewForm, noticeWaiverApproved: e.target.checked })}
+                      className="rounded border-gray-300 text-primary-600"
+                    />
+                    <span>Waive notice shortfall recovery penalty</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    className="btn-primary text-xs"
+                    disabled={reviewMutation.isPending}
+                    onClick={() => reviewMutation.mutate(reviewForm)}
+                  >
+                    {reviewMutation.isPending ? 'Recording Decision…' : 'Submit Decision'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
-          <button type="submit" className="btn-primary" disabled={save.isPending}>{save.isPending ? 'Saving…' : isEdit ? 'Save changes' : 'Add task'}</button>
+
+        {/* TAB 2: OFFBOARDING CHECKLIST */}
+        {tab === 'checklist' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-500">
+                Update each department clearance item in real-time.
+              </span>
+              <span className="text-xs font-bold text-primary-700">
+                {exit.offboardingChecklist?.filter(c => c.status === 'COMPLETED').length} of {exit.offboardingChecklist?.length} Cleared
+              </span>
+            </div>
+
+            <div className="divide-y divide-gray-100 max-h-[380px] overflow-y-auto pr-1">
+              {exit.offboardingChecklist?.map((task) => (
+                <div key={task._id || task.taskId} className="py-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] uppercase font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                        {task.category}
+                      </span>
+                      <p className="text-xs font-bold text-gray-900">{task.taskName}</p>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-0.5">{task.description}</p>
+                    {task.remarks && (
+                      <p className="text-[11px] text-primary-700 italic mt-0.5">Note: {task.remarks}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="input py-1 px-2 text-xs font-semibold w-32"
+                      value={task.status}
+                      disabled={checklistMutation.isPending}
+                      onChange={(e) => {
+                        checklistMutation.mutate({
+                          taskId: task.taskId || task._id,
+                          status: e.target.value,
+                          remarks: task.remarks || '',
+                        });
+                      }}
+                    >
+                      <option value="PENDING">Pending</option>
+                      <option value="COMPLETED">Completed</option>
+                      <option value="WAIVED">Waived</option>
+                      <option value="BLOCKED">Blocked</option>
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: ASSET RETURN REGISTER */}
+        {tab === 'assets' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-500">
+                Inspect physical condition and record return status for company property.
+              </span>
+              <button
+                type="button"
+                className="btn-secondary text-xs flex items-center gap-1.5 py-1"
+                onClick={() => reminderMutation.mutate()}
+                disabled={reminderMutation.isPending}
+              >
+                <BellRing className="h-3.5 w-3.5 text-amber-600" />
+                {reminderMutation.isPending ? 'Sending…' : 'Send Reminder Email'}
+              </button>
+            </div>
+
+            <div className="divide-y divide-gray-100 max-h-[380px] overflow-y-auto pr-1">
+              {exit.assetReturns?.map((asset) => (
+                <div key={asset._id || asset.name} className="py-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                      <Package className="h-4 w-4 text-gray-400" />
+                      {asset.name}
+                    </p>
+                    <p className="text-[11px] text-gray-500">
+                      Code: {asset.assetCode || '—'} &bull; Category: {asset.category}
+                      {asset.deductionAmount > 0 && (
+                        <span className="text-red-600 font-bold ml-2">
+                          Penalty: {formatCurrency(asset.deductionAmount)}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="input py-1 px-2 text-xs font-semibold w-28"
+                      value={asset.status}
+                      disabled={assetMutation.isPending}
+                      onChange={(e) => {
+                        assetMutation.mutate({
+                          assetReturnId: asset._id,
+                          status: e.target.value,
+                          condition: asset.condition || 'Verified Good',
+                          deductionAmount: asset.deductionAmount || 0,
+                        });
+                      }}
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Returned">Returned</option>
+                      <option value="Damaged">Damaged</option>
+                      <option value="Lost">Lost</option>
+                    </select>
+
+                    <input
+                      type="number"
+                      placeholder="Deduction"
+                      className="input py-1 px-2 text-xs w-24"
+                      defaultValue={asset.deductionAmount || ''}
+                      onBlur={(e) => {
+                        const val = Number(e.target.value) || 0;
+                        if (val !== asset.deductionAmount) {
+                          assetMutation.mutate({
+                            assetReturnId: asset._id,
+                            status: asset.status,
+                            condition: asset.condition || 'Damaged/Lost',
+                            deductionAmount: val,
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: FNF PAYROLL SETTLEMENT */}
+        {tab === 'fnf' && (
+          <div className="space-y-5">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-500">
+                Reconcile salary, encashment, notice period recovery, and deductions.
+              </span>
+              <div className="flex items-center gap-2">
+                <StatusBadge status={exit.fnfDetails?.status || 'PENDING'} />
+                {exit.fnfDetails?.status !== 'APPROVED' && exit.fnfDetails?.status !== 'PAID' && (
+                  <button
+                    type="button"
+                    className="btn-primary text-xs py-1 px-3"
+                    onClick={() => fnfApproveMutation.mutate()}
+                    disabled={fnfApproveMutation.isPending}
+                  >
+                    Approve FNF
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* FNF Form Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-lg text-xs">
+              <div>
+                <label className="text-gray-500 block mb-1">Payable Days</label>
+                <input
+                  type="number"
+                  className="input text-xs"
+                  defaultValue={exit.fnfDetails?.payableDays || 0}
+                  onBlur={(e) => fnfMutation.mutate({ payableDays: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-gray-500 block mb-1">Earned Salary</label>
+                <input
+                  type="number"
+                  className="input text-xs"
+                  defaultValue={exit.fnfDetails?.earnedSalary || 0}
+                  onBlur={(e) => fnfMutation.mutate({ earnedSalary: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-gray-500 block mb-1">Leave Encashment</label>
+                <input
+                  type="number"
+                  className="input text-xs"
+                  defaultValue={exit.fnfDetails?.leaveEncashment || 0}
+                  onBlur={(e) => fnfMutation.mutate({ leaveEncashment: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-gray-500 block mb-1">Notice Recovery</label>
+                <input
+                  type="number"
+                  className="input text-xs text-red-600 font-bold"
+                  defaultValue={exit.fnfDetails?.noticeRecovery || 0}
+                  onBlur={(e) => fnfMutation.mutate({ noticeRecovery: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-gray-500 block mb-1">Bonus / Ex-Gratia</label>
+                <input
+                  type="number"
+                  className="input text-xs"
+                  defaultValue={exit.fnfDetails?.bonus || 0}
+                  onBlur={(e) => fnfMutation.mutate({ bonus: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-gray-500 block mb-1">Incentives</label>
+                <input
+                  type="number"
+                  className="input text-xs"
+                  defaultValue={exit.fnfDetails?.incentives || 0}
+                  onBlur={(e) => fnfMutation.mutate({ incentives: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-gray-500 block mb-1">Asset Deductions</label>
+                <input
+                  type="number"
+                  className="input text-xs text-red-600"
+                  readOnly
+                  value={exit.fnfDetails?.assetDeductions || 0}
+                />
+              </div>
+
+              <div>
+                <label className="text-gray-500 block mb-1">Other Deductions</label>
+                <input
+                  type="number"
+                  className="input text-xs text-red-600"
+                  defaultValue={exit.fnfDetails?.otherDeductions || 0}
+                  onBlur={(e) => fnfMutation.mutate({ otherDeductions: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* Net Amount Box */}
+            <div className="rounded-lg bg-green-50 border border-green-200 p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-green-800 uppercase block">Net Settlement Amount</span>
+                <span className="text-2xl font-black text-green-900">
+                  {formatCurrency(exit.fnfDetails?.netSettlementAmount || 0)}
+                </span>
+              </div>
+
+              {exit.fnfDetails?.status !== 'PAID' ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Bank Transfer Ref"
+                    className="input text-xs py-1 px-2 w-36"
+                    value={paymentRef}
+                    onChange={(e) => setPaymentRef(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn-primary text-xs py-1 px-3 bg-green-700 hover:bg-green-800"
+                    disabled={fnfPayMutation.isPending}
+                    onClick={() => fnfPayMutation.mutate({ paymentReference: paymentRef || 'BANK-TRANSFER', paidDate: new Date() })}
+                  >
+                    Mark as Paid
+                  </button>
+                </div>
+              ) : (
+                <div className="text-right text-xs text-green-800">
+                  <span className="font-bold">PAID on {formatDate(exit.fnfDetails?.paidDate)}</span>
+                  <span className="block text-[11px] text-green-600 font-mono">Ref: {exit.fnfDetails?.paymentReference}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: SEPARATION DOCUMENTS */}
+        {tab === 'documents' && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Download and verify official corporate separation documents generated on DutyLaunch letterhead.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                { type: 'relieving', title: 'Relieving Letter', desc: 'Acceptance of resignation and official relief from duties.' },
+                { type: 'experience', title: 'Experience Certificate', desc: 'Tenure, performance, conduct and character certification.' },
+                { type: 'fnf', title: 'FNF Settlement Statement', desc: 'Itemized earnings, deductions, and bank disbursement summary.' },
+                { type: 'certificate', title: 'Exit Clearance Certificate', desc: 'Verification of complete cross-departmental separation.' },
+              ].map(d => (
+                <div key={d.type} className="p-3.5 rounded-lg border border-gray-200 bg-white flex justify-between items-center">
+                  <div>
+                    <h5 className="text-xs font-bold text-gray-900">{d.title}</h5>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{d.desc}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary text-xs flex items-center gap-1 py-1 px-2.5 ml-2"
+                    onClick={() => handleDownload(d.type, d.title)}
+                  >
+                    <Download className="h-3.5 w-3.5" /> PDF
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Complete Exit Formalities Button */}
+            {exit.status !== 'COMPLETED' && (
+              <div className="mt-6 rounded-lg bg-indigo-50 border border-indigo-200 p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-bold text-indigo-900">Conclude Employment & Complete Exit</h4>
+                  <p className="text-[11px] text-indigo-700 mt-0.5">
+                    This action will deactivate the employee's portal login account, archive their profile, mark FNF complete, and dispatch final formal separation letters.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn-primary text-xs bg-indigo-600 hover:bg-indigo-700 py-2 px-4 shadow-sm"
+                  disabled={completeMutation.isPending}
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you wish to complete exit formalities for ${emp?.fullName}? This will immediately disable their login account.`)) {
+                      completeMutation.mutate();
+                    }
+                  }}
+                >
+                  {completeMutation.isPending ? 'Completing Exit…' : 'Complete Exit Formalities'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 6: AUDIT TRAIL */}
+        {tab === 'audit' && (
+          <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+            <h4 className="text-xs font-bold text-gray-900 mb-2">Immutable Separation Audit Logs</h4>
+            <div className="divide-y divide-gray-100 text-xs">
+              {exit.auditLogs?.slice().reverse().map((log, i) => (
+                <div key={log._id || i} className="py-2.5 flex items-start justify-between gap-3">
+                  <div>
+                    <span className="font-bold text-gray-900 block">{log.action?.replace(/_/g, ' ')}</span>
+                    <span className="text-[11px] text-gray-500">
+                      By: {log.performedByName || 'System'} ({log.role || 'HRMS'}) {log.ip ? `&bull; IP: ${log.ip}` : ''}
+                    </span>
+                    {log.details && (
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5 bg-gray-50 p-1 rounded">
+                        {JSON.stringify(log.details)}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                    {formatDate(log.timestamp)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Footer Close */}
+        <div className="flex justify-end pt-3 border-t border-gray-100">
+          <button type="button" className="btn-secondary text-xs" onClick={onClose}>
+            Close
+          </button>
         </div>
-      </form>
-    </Modal>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-
-function InitiateOffboardingModal({ open, onClose, onStarted }) {
-  const empty = { employeeId: '', dateOfExit: '', exitReason: '', noticePeriodDays: '' };
-  const [form, setForm] = useState(empty);
-  const [errors, setErrors] = useState({});
-
-  const employees = useQuery({
-    queryKey: ['employees', 'active-options'],
-    queryFn: () => employeeAPI.options(),
-    enabled: open,
-    staleTime: 5 * 60 * 1000,
-  });
-  const staff = (employees.data?.data?.data?.managers || []).filter((m) => !m.dateOfExit);
-
-  const save = useMutation({
-    mutationFn: () => offboardingAPI.initiate(form.employeeId, {
-      dateOfExit: form.dateOfExit, exitReason: form.exitReason,
-      noticePeriodDays: form.noticePeriodDays ? Number(form.noticePeriodDays) : undefined,
-    }),
-    onSuccess: (res) => {
-      toast.success(`Offboarding started — ${res.data.data.tasksCreated} task(s) created`);
-      onStarted(res.data.data.employee);
-      close();
-    },
-    onError: (err) => { setErrors(fieldErrors(err)); toast.error(errorMessage(err)); },
-  });
-
-  function close() { setForm(empty); setErrors({}); onClose(); }
-
-  const submit = (e) => {
-    e.preventDefault();
-    const next = {};
-    if (!form.employeeId) next.employeeId = 'Choose an employee.';
-    if (!form.dateOfExit) next.dateOfExit = 'Choose the last working day.';
-    if (form.exitReason.trim().length < 2) next.exitReason = 'Give a reason for the exit.';
-    setErrors(next);
-    if (Object.keys(next).length) return;
-    save.mutate();
-  };
-
-  return (
-    <Modal open={open} onClose={close} title="Initiate offboarding" description="Records the exit and applies the standard offboarding checklist.">
-      <form onSubmit={submit} className="space-y-4 p-5">
-        <FormField label="Employee" required error={errors.employeeId}>
-          <Select
-            value={form.employeeId}
-            onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
-            options={staff.map((m) => ({ value: m._id, label: `${m.fullName} (${m.employeeCode})` }))}
-            placeholder="Select an employee"
-          />
-        </FormField>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField label="Last working day" required error={errors.dateOfExit}>
-            <input type="date" className="input" value={form.dateOfExit} onChange={(e) => setForm({ ...form, dateOfExit: e.target.value })} />
-          </FormField>
-          <FormField label="Notice period (days)">
-            <input type="number" min="0" max="365" className="input" value={form.noticePeriodDays} onChange={(e) => setForm({ ...form, noticePeriodDays: e.target.value })} />
-          </FormField>
-        </div>
-        <FormField label="Exit reason" required error={errors.exitReason}>
-          <input className="input" value={form.exitReason} onChange={(e) => setForm({ ...form, exitReason: e.target.value })} placeholder="e.g. Resigned — new opportunity" />
-        </FormField>
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
-          <button type="submit" className="btn-primary" disabled={save.isPending}>{save.isPending ? 'Starting…' : 'Start offboarding'}</button>
-        </div>
-      </form>
+      </div>
     </Modal>
   );
 }

@@ -304,14 +304,28 @@ export const performanceAPI = {
 
 /** Employee-initiated exit requests — new, minimal (see server/controllers/exitRequestController.js). */
 export const exitRequestAPI = {
-  create: (data) => api.post('/exit-requests/me', data),
+  create: (data) => {
+    if (data instanceof FormData) {
+      return api.post('/exit-requests/me', data, { headers: { 'Content-Type': 'multipart/form-data' } });
+    }
+    return api.post('/exit-requests/me', data);
+  },
   mine: () => api.get('/exit-requests/me'),
-  cancel: (id) => api.patch(`/exit-requests/me/${id}/cancel`),
+  cancel: (id) => api.patch('/exit-requests/me/' + id + '/cancel'),
   list: (params) => api.get('/exit-requests', { params: clean(params) }),
-  get: (id) => api.get(`/exit-requests/${id}`),
-  approve: (id) => api.patch(`/exit-requests/${id}/approve`),
-  reject: (id, reason) => api.patch(`/exit-requests/${id}/reject`, { reason }),
-  complete: (id) => api.patch(`/exit-requests/${id}/complete`),
+  get: (id) => api.get('/exit-requests/' + id),
+  reviewStage: (id, data) => api.patch('/exit-requests/' + id + '/review-stage', data),
+  updateChecklist: (id, data) => api.patch('/exit-requests/' + id + '/checklist-item', data),
+  updateAsset: (id, data) => api.patch('/exit-requests/' + id + '/asset-return', data),
+  sendAssetReminder: (id) => api.post('/exit-requests/' + id + '/asset-reminder'),
+  calculateFNF: (id, data) => api.patch('/exit-requests/' + id + '/fnf/calculate', data),
+  approveFNF: (id) => api.patch('/exit-requests/' + id + '/fnf/approve'),
+  recordFNFPayment: (id, data) => api.patch('/exit-requests/' + id + '/fnf/record-payment', data),
+  complete: (id) => api.patch('/exit-requests/' + id + '/complete'),
+  downloadDocument: (id, docType) => api.get('/exit-requests/' + id + '/documents/' + docType, { responseType: 'blob' }),
+  // Backward compatibility
+  approve: (id, notes) => api.patch('/exit-requests/' + id + '/review-stage', { stage: 'HR', action: 'APPROVE', notes: notes || '' }),
+  reject: (id, reason) => api.patch('/exit-requests/' + id + '/review-stage', { stage: 'HR', action: 'REJECT', notes: reason || '' }),
 };
 
 /** Organization settings — new, minimal, elevated-only (see server/controllers/orgSettingsController.js). */

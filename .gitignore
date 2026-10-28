@@ -1,4 +1,21 @@
+# Dependencies
 node_modules/
+
+# Production build output
 dist/
+build/
+
+# Environment variables & secrets
 .env
+.env.*
+!.env.example
+
+# Logs and system files
 *.log
+.DS_Store
+
+# Temporary & debug scripts
+__*.js
+__*.cjs
+test_*.js
+test_*.cjs
